@@ -2,6 +2,7 @@
 
 members = [ "easypqp-cli",
     "easypqp-core",
+    "easypqp-py"
 ]
 
 resolver = "2"
