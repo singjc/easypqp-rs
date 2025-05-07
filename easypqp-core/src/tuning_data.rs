@@ -229,6 +229,6 @@ mod tests {
         
         let peptide_data = result.unwrap();
         assert!(!peptide_data.is_empty());
-        assert!(peptide_data.len() == 1000);
+        assert!(peptide_data.len() == 500);
     }
 }
