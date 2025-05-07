@@ -10,5 +10,4 @@ crate-type = ["cdylib"]
 [dependencies]
 easypqp-cli = { path = "../easypqp-cli" }
 pyo3 = { version = "0.24.2", features = ["extension-module", "anyhow"] }
-num_cpus = "1.13"
 serde_json = "1.0"
