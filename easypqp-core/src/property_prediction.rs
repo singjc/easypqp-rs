@@ -1,28 +1,28 @@
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
-use core::f32;
 use anyhow::Result;
+use core::f32;
+use itertools::multiunzip;
 use rayon::iter::ParallelIterator;
 use rayon::prelude::*;
-use itertools::multiunzip;
-use rustyms::fragment::FragmentKind;
-use rustyms::FragmentationModel;
-use rustyms::system::e;
-use rustyms::system::usize::Charge;
-use sage_core::peptide::Peptide;
-use redeem_properties::models::model_interface::{PredictionValue, PredictionResult};
+use redeem_properties::models::model_interface::PredictionValue;
 use redeem_properties::utils::logging::Progress;
 use redeem_properties::{
     models::model_interface::DLModels,
     utils::peptdeep_utils::{
-        ccs_to_mobility_bruker, get_modification_string,
-        remove_mass_shift, ModificationMap,
+        ccs_to_mobility_bruker, get_modification_string, remove_mass_shift, ModificationMap,
     },
 };
+use rustyms::fragment::FragmentKind;
+use rustyms::system::e;
+use rustyms::system::usize::Charge;
+use rustyms::FragmentationModel;
+use sage_core::peptide::Peptide;
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 
-
-use crate::{is_allowed_fragment, select_model, InsilicoPQPSettings, PeptideProperties, PrecursorProperties, ProductProperties};
-
+use crate::{
+    is_allowed_fragment, select_model, InsilicoPQPSettings, PeptideProperties, PrecursorProperties,
+    ProductProperties,
+};
 
 pub struct PropertyPrediction<'db, 'params> {
     pub peptides: &'db Vec<Peptide>,
@@ -56,7 +56,7 @@ impl<'db, 'params> PropertyPrediction<'db, 'params> {
         let rt_model = self.dl_models.rt_model.as_ref().cloned();
         let ccs_model = self.dl_models.ccs_model.as_ref().cloned();
         let ms2_model = self.dl_models.ms2_model.as_ref().cloned();
-    
+
         // Step 1: Parallelized peptide + charge expansion with progress
         let total_peptides = self.peptides.len();
         let progress = Progress::new(total_peptides, "Expanding peptides...");
@@ -112,29 +112,27 @@ impl<'db, 'params> PropertyPrediction<'db, 'params> {
 
         drop(send);
         progress_thread.join().unwrap();
-    
-        let start = std::time::Instant::now();
 
         let (peptide_sequences, mods, mod_sites, charges, peptide_indices): (
-                Vec<String>,
-                Vec<String>,
-                Vec<String>,
-                Vec<i32>,
-                Vec<(u32, u8)>
-            ) = multiunzip(expanded);
-    
+            Vec<String>,
+            Vec<String>,
+            Vec<String>,
+            Vec<i32>,
+            Vec<(u32, u8)>,
+        ) = multiunzip(expanded);
+
         // Step 2: Create chunks for prediction
         let total_batches = (peptide_sequences.len() + self.batch_size - 1) / self.batch_size;
         let progress = Progress::new(total_batches, "Predicting properties...");
         let (send, recv) = crossbeam_channel::bounded(1024);
-    
+
         let progress_thread = std::thread::spawn(move || {
             while recv.recv().is_ok() {
                 progress.inc();
             }
             progress.finish();
         });
-    
+
         let batches: Vec<_> = (0..peptide_sequences.len())
             .step_by(self.batch_size)
             .map(|start| {
@@ -155,23 +153,23 @@ impl<'db, 'params> PropertyPrediction<'db, 'params> {
             .as_ref()
             .expect("DL model parameters must be present")
             .clone(); // clone once here
-    
+
         let predictions: Vec<_> = batches
             .par_iter()
             .map_init(
-                || (
-                    send.clone(),
-                    // rt_model_opt.clone(),
-                    // ccs_model_opt.clone(),
-                    // ms2_model_opt.clone(),
-                    params.clone(),
-                ),
-                |(sender, params), (seqs, mods, sites, chgs, indices)| {
+                || {
+                    send.clone()
+                },
+                |sender, (seqs, mods, sites, chgs, indices)| {
                     let start_time = std::time::Instant::now();
-                    let rt_preds = rt_model.as_ref().and_then(|m| m.predict(seqs, mods, sites).ok());
+                    let rt_preds = rt_model
+                        .as_ref()
+                        .and_then(|m| m.predict(seqs, mods, sites).ok());
                     log::debug!("RT prediction time: {:?}", start_time.elapsed());
                     let start_time = std::time::Instant::now();
-                    let ccs_preds = ccs_model.as_ref().and_then(|m| m.predict(seqs, mods, sites, chgs.clone()).ok());
+                    let ccs_preds = ccs_model
+                        .as_ref()
+                        .and_then(|m| m.predict(seqs, mods, sites, chgs.clone()).ok());
                     log::debug!("CCS prediction time: {:?}", start_time.elapsed());
                     let start_time = std::time::Instant::now();
                     let ms2_preds = ms2_model.as_ref().and_then(|m| {
@@ -182,10 +180,11 @@ impl<'db, 'params> PropertyPrediction<'db, 'params> {
                             chgs.clone(),
                             vec![params.nce as i32; seqs.len()],
                             vec![params.instrument.clone(); seqs.len()],
-                        ).ok()
+                        )
+                        .ok()
                     });
                     log::debug!("MS2 prediction time: {:?}", start_time.elapsed());
-                    
+
                     let start_time = std::time::Instant::now();
                     let mut result = Vec::new();
                     for (i, (peptide_idx, charge)) in indices.iter().enumerate() {
@@ -194,51 +193,56 @@ impl<'db, 'params> PropertyPrediction<'db, 'params> {
                             (
                                 rt_preds.as_ref().map(|v| v.get_prediction_entry(i)[0]),
                                 ccs_preds.as_ref().map(|v| v.get_prediction_entry(i)[0]),
-                                ms2_preds.as_ref().map(|v| v.get_prediction_entry(i).clone()),
+                                ms2_preds
+                                    .as_ref()
+                                    .map(|v| v.get_prediction_entry(i).clone()),
                             ),
                         ));
                     }
-                    log::debug!("Collecting prediction results time: {:?}", start_time.elapsed());
-    
+                    log::debug!(
+                        "Collecting prediction results time: {:?}",
+                        start_time.elapsed()
+                    );
+
                     let _ = sender.send(());
                     result
                 },
             )
             .flatten()
             .collect();
-    
+
         drop(send);
         progress_thread.join().unwrap();
-    
+
         {
             let mut final_predictions = self.predictions.lock().unwrap();
             for (key, value) in predictions {
                 final_predictions.insert(key, value);
             }
         }
-    
+
         // Step 3: Build assays from predictions
         let preds_clone = {
             let preds = self.predictions.lock().unwrap();
             preds.clone()
         };
-    
+
         let total_assays = preds_clone.len();
         let progress = Progress::new(total_assays, "Creating PQP assays...");
         let (send, recv) = crossbeam_channel::bounded(1024);
-    
+
         let progress_thread = std::thread::spawn(move || {
             while recv.recv().is_ok() {
                 progress.inc();
             }
             progress.finish();
         });
-    
+
         let model = select_model(
             &self.insilico_settings.fragmentation_model,
             FragmentationModel::cid_hcd(),
         );
-    
+
         let assays: Vec<_> = preds_clone
             .par_iter()
             .map_init(
@@ -246,16 +250,17 @@ impl<'db, 'params> PropertyPrediction<'db, 'params> {
                 |(model, sender), ((peptide_idx, charge), (rt_pred, ccs_pred, ms2_pred))| {
                     let peptide = &self.peptides[*peptide_idx as usize];
                     let precursor_mz = peptide.monoisotopic / (*charge as f32);
-    
+
                     let peptidoform = rustyms::peptidoform::PeptidoformIon::pro_forma(
-                        &peptide.to_string(), None
+                        &peptide.to_string(),
+                        None,
                     )?;
-    
+
                     let fragments = peptidoform.generate_theoretical_fragments(
                         Charge::new::<e>(self.insilico_settings.max_fragment_charge),
                         *model,
                     );
-    
+
                     let mut product = ProductProperties {
                         peptide_index: *peptide_idx,
                         ion_type: Vec::new(),
@@ -264,38 +269,52 @@ impl<'db, 'params> PropertyPrediction<'db, 'params> {
                         product_mz: Vec::new(),
                         intensity: Vec::new(),
                     };
-    
+
                     for fragment in fragments {
-                        if !is_allowed_fragment(fragment.ion.kind(), &self.insilico_settings.allowed_fragment_types)
-                            || !fragment.neutral_loss.is_empty() {
+                        if !is_allowed_fragment(
+                            fragment.ion.kind(),
+                            &self.insilico_settings.allowed_fragment_types,
+                        ) || !fragment.neutral_loss.is_empty()
+                        {
                             continue;
                         }
-    
+
                         let ion = &fragment.ion;
                         let mz = fragment.mz(rustyms::MassMode::Monoisotopic).unwrap().value;
-    
+
                         let (row, col) = match (ion.kind(), fragment.charge.value) {
-                            (FragmentKind::b, 1) => (ion.position().unwrap().series_number as u8 - 1, 0),
-                            (FragmentKind::b, 2) => (ion.position().unwrap().series_number as u8 - 1, 1),
-                            (FragmentKind::y, 1) => (ion.position().unwrap().series_number as u8 - 1, 2),
-                            (FragmentKind::y, 2) => (ion.position().unwrap().series_number as u8 - 1, 3),
+                            (FragmentKind::b, 1) => {
+                                (ion.position().unwrap().series_number as u8 - 1, 0)
+                            }
+                            (FragmentKind::b, 2) => {
+                                (ion.position().unwrap().series_number as u8 - 1, 1)
+                            }
+                            (FragmentKind::y, 1) => {
+                                (ion.position().unwrap().series_number as u8 - 1, 2)
+                            }
+                            (FragmentKind::y, 2) => {
+                                (ion.position().unwrap().series_number as u8 - 1, 3)
+                            }
                             _ => continue,
                         };
-    
-                        let intensity = ms2_pred.as_ref()
+
+                        let intensity = ms2_pred
+                            .as_ref()
                             .and_then(|pred| pred.get(row as usize, col as usize))
                             .copied()
                             .unwrap_or(0.0);
-    
+
                         product.ion_type.push(ion.kind());
-                        product.ion_ordinal.push(ion.position().unwrap().series_number as u8);
+                        product
+                            .ion_ordinal
+                            .push(ion.position().unwrap().series_number as u8);
                         product.charge.push(fragment.charge.value as u8);
                         product.product_mz.push(mz);
                         product.intensity.push(intensity);
                     }
-    
+
                     let _ = sender.send(());
-    
+
                     Ok(PeptideProperties {
                         peptide_index: *peptide_idx,
                         retention_time: rt_pred.unwrap_or_default(),
@@ -303,20 +322,25 @@ impl<'db, 'params> PropertyPrediction<'db, 'params> {
                             peptide_index: *peptide_idx,
                             charge: *charge,
                             precursor_mz,
-                            ion_mobility: ccs_pred.map(|ccs| {
-                                ccs_to_mobility_bruker(ccs as f64, *charge as f64, precursor_mz as f64)
-                            }).unwrap_or(f64::NAN),
+                            ion_mobility: ccs_pred
+                                .map(|ccs| {
+                                    ccs_to_mobility_bruker(
+                                        ccs as f64,
+                                        *charge as f64,
+                                        precursor_mz as f64,
+                                    )
+                                })
+                                .unwrap_or(f64::NAN),
                         },
                         product,
                     })
-                }
+                },
             )
             .collect::<Result<Vec<_>>>()?;
-    
+
         drop(send);
         progress_thread.join().unwrap();
-    
+
         Ok(assays)
     }
-    
 }

@@ -2,6 +2,7 @@ use std::fs::File;
 use std::io::Read;
 use std::path::Path;
 use anyhow::Error;
+use std::path::PathBuf;
 
 
 pub fn read_fasta<S>(
@@ -35,4 +36,14 @@ where
     let mut contents = String::new();
     file.read_to_string(&mut contents)?;
     Ok(serde_json::from_str(&contents)?)
+}
+
+
+pub fn get_test_file(name: &str) -> PathBuf {
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+
+    // Walk up to workspace root
+    let workspace_root = manifest_dir.ancestors().nth(1).unwrap(); 
+
+    workspace_root.join("test-data").join(name)
 }

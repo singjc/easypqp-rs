@@ -108,12 +108,6 @@ impl From<FineTuneOptions> for FineTuneSettings {
     }
 }
 
-impl FineTuneSettings {
-    pub fn is_not_empty(&self) -> bool {
-        self.fine_tune
-    }
-}
-
 #[derive(Serialize, Deserialize, Default, Debug, Clone)]
 pub struct DLFeatureGenerators {
     pub predict_properties: Option<bool>,
@@ -293,6 +287,7 @@ impl Input {
         Ok(input)
     }
 
+    #[allow(dead_code)]
     /// Load parameters from a JSON file and validate them. This function is used for the python bindings.
     pub fn from_passed_arguments(
         path: &str,
@@ -385,7 +380,7 @@ impl Input {
         easypqp_core::util::read_json(path).map_err(anyhow::Error::from)
     }
 
-    pub fn build(mut self) -> anyhow::Result<InsilicoPQP> {
+    pub fn build(self) -> anyhow::Result<InsilicoPQP> {
         let database = self.database.make_parameters();
 
         Ok(InsilicoPQP {

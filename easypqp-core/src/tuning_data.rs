@@ -77,7 +77,6 @@ pub fn read_peptide_data_from_tsv<P: AsRef<Path>>(
 
     // First pass - collect all retention times for normalization
     let mut all_retention_times = Vec::new();
-    let mut line_count = 0;
     
     for line in lines.by_ref() {
         let line = line?;
@@ -90,7 +89,6 @@ pub fn read_peptide_data_from_tsv<P: AsRef<Path>>(
                 }
             }
         }
-        line_count += 1;
     }
 
     // Calculate global RT min/max (skip if no valid RTs found)
@@ -211,4 +209,26 @@ pub fn read_peptide_data_from_tsv<P: AsRef<Path>>(
     }
 
     Ok(peptide_map.into_values().collect())
+}
+
+
+
+#[cfg(test)]
+mod tests {
+    use crate::util::get_test_file;
+    use super::*;
+
+    #[test]
+    fn test_read_peptide_data_from_tsv() {
+        let test_file = get_test_file("fine_tune_data.tsv");
+        let nce = 20;
+        let instrument = "QE";
+        
+        let result = read_peptide_data_from_tsv(test_file, nce, instrument);
+        assert!(result.is_ok());
+        
+        let peptide_data = result.unwrap();
+        assert!(!peptide_data.is_empty());
+        assert!(peptide_data.len() == 1000);
+    }
 }

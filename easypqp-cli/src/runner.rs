@@ -2,8 +2,8 @@
 use anyhow::{Context, Result};
 use easypqp_core::{property_prediction::PropertyPrediction, tuning_data::read_peptide_data_from_tsv, PeptideProperties};
 use log::{info, warn};
-use sage_core::{database, peptide::Peptide};
-use std::{path::Path, sync::{Arc, Mutex}, time::Instant};
+use sage_core::peptide::Peptide;
+use std::{path::Path, time::Instant};
 
 use crate::{input::InsilicoPQP, output::write_assays_to_tsv};
 
@@ -227,7 +227,7 @@ impl Runner {
         })
     }
 
-    pub fn run(mut self) -> anyhow::Result<()> {
+    pub fn run(self) -> anyhow::Result<()> {
 
         let start_time = Instant::now();
         let mut property_prediction_scores = PropertyPredictionScores::new(&self.parameters,  &self.peptides);

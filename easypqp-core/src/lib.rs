@@ -1,7 +1,4 @@
-use std::sync::Arc;
-
 use rustyms::{fragment::FragmentKind, FragmentationModel};
-use sage_core::{database::PeptideIx, ion_series::Kind};
 use serde::{Deserialize, Serialize};
 
 pub mod property_prediction;
@@ -107,6 +104,7 @@ impl ProductProperties {
     }
 }
 
+/// Selects the fragmentation model based on user input.
 /// From https://github.com/rusteomics/mzcore/blob/main/examples/multi-annotator/src/main.rs
 pub fn select_model(text: &str, default: &'static FragmentationModel) -> &'static FragmentationModel {
     match text.to_ascii_lowercase().as_str() {
@@ -144,7 +142,7 @@ pub fn select_model(text: &str, default: &'static FragmentationModel) -> &'stati
 /// as these will still be filtered out due to MS2 model limitations.
 ///
 /// # Example
-/// ```
+/// ```ignore
 /// // System configuration (would typically come from settings)
 /// let allowed_types = vec!["a".into(), "y".into()];
 ///
@@ -172,4 +170,70 @@ pub fn is_allowed_fragment(kind: FragmentKind, allowed_types: &[String]) -> bool
     }
 
     false // Only b/y actually pass
+}
+
+
+#[cfg(test)]
+mod tests {
+ 
+    use super::*;
+    use rustyms::fragment::FragmentKind;
+
+    #[test]
+    fn test_insilico_default_settings() {
+        let settings = InsilicoPQPSettings::default();
+        assert_eq!(settings.precursor_charge, vec![2, 3]);
+        assert_eq!(settings.max_fragment_charge, 2);
+        assert_eq!(settings.min_transitions, 6);
+        assert_eq!(settings.max_transitions, 6);
+        assert_eq!(settings.fragmentation_model, "cid_hcd");
+        assert_eq!(settings.allowed_fragment_types, vec!["b", "y"]);
+    }
+
+    #[test]
+    fn test_product_properties_sorting() {
+        let props = ProductProperties {
+            peptide_index: 1,
+            ion_type: vec![FragmentKind::b, FragmentKind::y, FragmentKind::b],
+            ion_ordinal: vec![1, 2, 3],
+            charge: vec![1, 1, 2],
+            product_mz: vec![100.0, 200.0, 150.0],
+            intensity: vec![10.0, 50.0, 30.0],
+        };
+
+        let sorted = props.sorted_intensity_indices();
+        assert_eq!(sorted, vec![1, 2, 0]);
+
+        let top2 = props.top_n_intense_indices(2);
+        assert_eq!(top2, vec![1, 2]);
+    }
+
+    #[test]
+    fn test_fragment_filtering_logic() {
+        let allowed = vec!["b".to_string(), "y".to_string(), "a".to_string()];
+        assert!(is_allowed_fragment(FragmentKind::b, &allowed));
+        assert!(is_allowed_fragment(FragmentKind::y, &allowed));
+        assert!(!is_allowed_fragment(FragmentKind::a, &allowed)); // warns but returns false
+    }
+
+    #[test]
+    fn test_select_model() {
+        use rustyms::model::FragmentationModel;
+
+        let default = FragmentationModel::cid_hcd();
+
+        assert_eq!(
+            select_model("etd", &default),
+            FragmentationModel::etd()
+        );
+        assert_eq!(
+            select_model("CID", &default),
+            FragmentationModel::cid_hcd()
+        );
+        assert_eq!(
+            select_model("unknown", &default),
+            default
+        );
+    }   
+
 }

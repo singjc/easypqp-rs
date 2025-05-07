@@ -60,7 +60,7 @@ fn main() -> anyhow::Result<()> {
 
     let runner = input.build().and_then(runner::Runner::new)?;
 
-    let tel = runner.run()?;
+    let _ = runner.run()?;
 
     Ok(())
 }
