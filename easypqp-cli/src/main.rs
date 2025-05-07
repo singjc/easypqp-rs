@@ -1,9 +1,5 @@
-use anyhow::{Context, anyhow};
-use clap::{value_parser, Arg, Command, ValueHint};
+use clap::{Arg, Command, ValueHint};
 use input::Input;
-use log::info;
-
-use std::time::Instant;
 
 mod input;
 mod runner;
@@ -57,19 +53,14 @@ fn main() -> anyhow::Result<()> {
         )
         .get_matches();
 
-    let parallel = matches
-        .get_one::<u16>("batch-size")
-        .copied()
-        .unwrap_or_else(|| num_cpus::get() as u16 / 2) as usize;
-
     // Not supported yet
-    let parquet = matches.get_one::<bool>("parquet").copied().unwrap_or(false);
+    // let parquet = matches.get_one::<bool>("parquet").copied().unwrap_or(false);
 
     let input = Input::from_arguments(matches)?;
 
     let runner = input.build().and_then(runner::Runner::new)?;
 
-    let tel = runner.run(parallel, parquet)?;
+    let tel = runner.run()?;
 
     Ok(())
 }

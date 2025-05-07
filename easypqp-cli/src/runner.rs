@@ -2,7 +2,7 @@
 use anyhow::{Context, Result};
 use easypqp_core::{property_prediction::PropertyPrediction, tuning_data::read_peptide_data_from_tsv, PeptideProperties};
 use log::{info, warn};
-use sage_core::database::IndexedDatabase;
+use sage_core::{database, peptide::Peptide};
 use std::{path::Path, sync::{Arc, Mutex}, time::Instant};
 
 use crate::{input::InsilicoPQP, output::write_assays_to_tsv};
@@ -17,12 +17,12 @@ use redeem_properties::utils::{peptdeep_utils::load_modifications, utils::get_de
 
 struct PropertyPredictionScores<'a> {
     parameters: &'a InsilicoPQP, 
-    database: &'a IndexedDatabase, 
+    peptides: &'a Vec<Peptide>, 
     fine_tune_data: Option<Vec<PeptideData>>
 } 
 
 impl<'a> PropertyPredictionScores<'a> {
-    pub fn new(parameters: &'a InsilicoPQP, database: &'a IndexedDatabase) -> Self {
+    pub fn new(parameters: &'a InsilicoPQP, peptides: &'a Vec<Peptide>) -> Self {
         let fine_tune_data = if parameters.dl_feature_generators.fine_tune_config.fine_tune {
             Some(read_peptide_data_from_tsv(
                 parameters.dl_feature_generators.fine_tune_config.train_data_path.clone(),
@@ -33,7 +33,7 @@ impl<'a> PropertyPredictionScores<'a> {
             None
         };
 
-        Self { parameters, database, fine_tune_data }
+        Self { parameters, peptides, fine_tune_data }
     }
 
     fn initialize_dl_models(&self) -> Result<DLModels> {
@@ -73,7 +73,7 @@ impl<'a> PropertyPredictionScores<'a> {
         }
     }
 
-    fn load_rt_model(&self) -> Result<Arc<Mutex<RTModelWrapper>>> {
+    fn load_rt_model(&self) -> Result<RTModelWrapper> {
         let mut model = load_retention_time_model(
             &self.parameters.dl_feature_generators.retention_time.model_path,
             &self.parameters.dl_feature_generators.retention_time.constants_path,
@@ -105,10 +105,10 @@ impl<'a> PropertyPredictionScores<'a> {
         }
 
         model.set_evaluation_mode();
-        Ok(Arc::new(Mutex::new(model)))
+        Ok(model)
     }
 
-    fn load_ccs_model(&self) -> Result<Arc<Mutex<CCSModelWrapper>>> {
+    fn load_ccs_model(&self) -> Result<CCSModelWrapper> {
         let mut model = load_collision_cross_section_model(
             &self.parameters.dl_feature_generators.ion_mobility.model_path,
             &self.parameters.dl_feature_generators.ion_mobility.constants_path,
@@ -139,10 +139,10 @@ impl<'a> PropertyPredictionScores<'a> {
 
         }
 
-        Ok(Arc::new(Mutex::new(model)))
+        Ok(model)
     }
 
-    fn load_ms2_model(&self) -> Result<Arc<Mutex<MS2ModelWrapper>>> {
+    fn load_ms2_model(&self) -> Result<MS2ModelWrapper> {
         let mut model = load_ms2_model(
             &self.parameters.dl_feature_generators.ms2_intensity.model_path,
             &self.parameters.dl_feature_generators.ms2_intensity.constants_path,
@@ -172,7 +172,7 @@ impl<'a> PropertyPredictionScores<'a> {
             }
         }
 
-        Ok(Arc::new(Mutex::new(model)))
+        Ok(model)
     }
 
     pub fn predict_properties(&mut self) -> Result<Vec<PeptideProperties>> {
@@ -182,7 +182,7 @@ impl<'a> PropertyPredictionScores<'a> {
         let modifications = load_modifications()?;
 
         // Create a PropertyPrediction instance and predict properties
-        let mut property_prediction = PropertyPrediction::new(&self.database, &self.parameters.insilico_settings, dl_models, modifications, self.parameters.dl_feature_generators.batch_size);
+        let mut property_prediction = PropertyPrediction::new(&self.peptides, &self.parameters.insilico_settings, dl_models, modifications, self.parameters.dl_feature_generators.batch_size);
 
         
         let assays = property_prediction.predict_properties()?;
@@ -193,15 +193,14 @@ impl<'a> PropertyPredictionScores<'a> {
 
 
 pub struct Runner {
-    database: IndexedDatabase,
-    parameters: InsilicoPQP,
-    start: Instant,
+    peptides: Vec<Peptide>,
+    parameters: InsilicoPQP
 }
 
 impl Runner {
     pub fn new(parameters: InsilicoPQP) -> anyhow::Result<Self> {
         let start = Instant::now();
-        let fasta = sage_cloudpath::util::read_fasta(
+        let fasta = easypqp_core::util::read_fasta(
             &parameters.database.fasta,
             &parameters.database.decoy_tag,
             parameters.database.generate_decoys,
@@ -213,39 +212,47 @@ impl Runner {
             )
         })?;
 
-        let database = parameters.database.clone().build(fasta);
+        // let database = parameters.database.clone().build(fasta);
+        let peptides = parameters.database.clone().digest(&fasta);
+
         info!(
-            "generated {} fragments, {} peptides in {}ms",
-            database.fragments.len(),
-            database.peptides.len(),
+            "generated {} peptides in {}ms",
+            peptides.len(),
             (Instant::now() - start).as_millis()
         );
 
         Ok(Self {
-            database,
-            parameters,
-            start,
+            peptides,
+            parameters
         })
     }
 
-    pub fn run(mut self, parallel: usize, parquet: bool) -> anyhow::Result<()> {
-
-        // Get unique peptides in the database
-        let unique_peptides = self.database.peptides.iter().collect::<Vec<_>>();
-        log::info!(
-            "deep learning property prediction for {:?} peptides (this may take some time)",
-            unique_peptides.len()
-        );
+    pub fn run(mut self) -> anyhow::Result<()> {
 
         let start_time = Instant::now();
-        let mut property_prediction_scores = PropertyPredictionScores::new(&self.parameters,  &self.database);
+        let mut property_prediction_scores = PropertyPredictionScores::new(&self.parameters,  &self.peptides);
         let assays: Vec<PeptideProperties> = property_prediction_scores.predict_properties()?;
 
-        write_assays_to_tsv(&assays, &self.database, "library.tsv", &self.parameters.insilico_settings)?;
+        write_assays_to_tsv(&assays, &self.peptides, &self.parameters.output_file, &self.parameters.insilico_settings)?;
 
         let execution_time = Instant::now() - start_time;
         log::info!("Insilico library generation: {:8} min", execution_time.as_secs() / 60);
 
+        let path = "easypqp_insilico.json";
+        println!("{}", serde_json::to_string_pretty(&self.parameters.as_serializable())?);
+        let bytes = serde_json::to_vec_pretty(&self.parameters.as_serializable())?;
+        write_bytes_to_file(path, &bytes)?;
+
         Ok(())
     }
+}
+
+use std::fs::File;
+use std::io::Write;
+
+fn write_bytes_to_file(path: &str, bytes: &[u8]) -> std::io::Result<()> {
+    let path = Path::new(path);
+    let mut file = File::create(path)?;
+    file.write_all(bytes)?;
+    Ok(())
 }

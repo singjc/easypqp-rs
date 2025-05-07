@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 
 pub mod property_prediction;
 pub mod tuning_data;
+pub mod util;
 
 
 #[derive(Serialize, Deserialize, Clone)]

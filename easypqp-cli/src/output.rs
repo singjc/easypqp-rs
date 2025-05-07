@@ -4,12 +4,12 @@ use std::path::Path;
 
 use easypqp_core::{InsilicoPQPSettings, PeptideProperties};
 use redeem_properties::utils::peptdeep_utils::remove_mass_shift;
-use sage_core::database::IndexedDatabase;
+use sage_core::peptide::Peptide;
 
 
 pub fn write_assays_to_tsv<P: AsRef<Path>>(
     assays: &[PeptideProperties],
-    db: &IndexedDatabase, 
+    peptides: &Vec<Peptide>, 
     path: P,
     insilico_settings: &InsilicoPQPSettings,
 ) -> std::io::Result<()> {
@@ -52,10 +52,10 @@ pub fn write_assays_to_tsv<P: AsRef<Path>>(
 
     for assay in assays {
         let peptide_idx = assay.peptide_index as usize;
-        let decoy = db.peptides[peptide_idx].decoy;
-        let modified_peptide = db.peptides[peptide_idx].to_string();
+        let decoy = peptides[peptide_idx].decoy;
+        let modified_peptide = peptides[peptide_idx].to_string();
         let naked_peptide = remove_mass_shift(&modified_peptide);
-        let protein = &db.peptides[peptide_idx].proteins;
+        let protein = &peptides[peptide_idx].proteins;
 
         // Step 1: Filter out zero-intensity transitions
         let non_zero_indices: Vec<usize> = assay.product.intensity
