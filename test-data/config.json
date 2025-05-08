@@ -50,5 +50,6 @@
         "nce": 20.0,
         "batch_size": 64
     },
+    "peptide_chunking": 0,
     "output_file": "./easypqp_insilico_library.tsv"
 }
