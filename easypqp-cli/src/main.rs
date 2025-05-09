@@ -43,7 +43,7 @@ fn main() -> anyhow::Result<()> {
                     "File path that in-silico library will be written to. \
                      Overrides the directory specified in the configuration file.",
                 )
-                .value_hint(ValueHint::DirPath),
+                .value_hint(ValueHint::FilePath),
         )
         .help_template(
             "{usage-heading} {usage}\n\n\
