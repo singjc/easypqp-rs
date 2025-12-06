@@ -10,7 +10,7 @@ use redeem_properties::{
         ms2_model::{load_ms2_model, MS2ModelWrapper},
         rt_model::{load_retention_time_model, RTModelWrapper},
     },
-    utils::data_handling::PeptideData,
+    utils::data_handling::{PeptideData, TargetNormalization},
 };
 use easypqp_core::{
     property_prediction::PropertyPrediction, tuning_data::read_peptide_data_from_tsv,
@@ -104,17 +104,27 @@ impl<'a> PropertyPredictionScores<'a> {
     }
 
     fn load_rt_model(&self) -> Result<RTModelWrapper> {
+        let model_path = self
+            .parameters
+            .dl_feature_generators
+            .retention_time
+            .model_path
+            .clone();
+        let const_path_str = self
+            .parameters
+            .dl_feature_generators
+            .retention_time
+            .constants_path
+            .clone();
+        let constants_opt = if const_path_str.is_empty() {
+            None
+        } else {
+            Some(const_path_str)
+        };
+
         let mut model = load_retention_time_model(
-            &self
-                .parameters
-                .dl_feature_generators
-                .retention_time
-                .model_path,
-            &self
-                .parameters
-                .dl_feature_generators
-                .retention_time
-                .constants_path,
+            &model_path,
+            constants_opt.as_ref(),
             &self
                 .parameters
                 .dl_feature_generators
@@ -156,6 +166,7 @@ impl<'a> PropertyPredictionScores<'a> {
                         .dl_feature_generators
                         .fine_tune_config
                         .epochs,
+                    TargetNormalization::None,
                 )?;
 
                 if self
@@ -183,17 +194,22 @@ impl<'a> PropertyPredictionScores<'a> {
     }
 
     fn load_ccs_model(&self) -> Result<CCSModelWrapper> {
+        let model_path = self
+            .parameters
+            .dl_feature_generators
+            .ion_mobility
+            .model_path
+            .clone();
+        let const_path_str = self
+            .parameters
+            .dl_feature_generators
+            .ion_mobility
+            .constants_path
+            .clone();
+
         let mut model = load_collision_cross_section_model(
-            &self
-                .parameters
-                .dl_feature_generators
-                .ion_mobility
-                .model_path,
-            &self
-                .parameters
-                .dl_feature_generators
-                .ion_mobility
-                .constants_path,
+            &model_path,
+            &const_path_str,
             &self
                 .parameters
                 .dl_feature_generators
@@ -235,6 +251,7 @@ impl<'a> PropertyPredictionScores<'a> {
                         .dl_feature_generators
                         .fine_tune_config
                         .epochs,
+                    TargetNormalization::None,
                 )?;
 
                 if self
@@ -261,17 +278,22 @@ impl<'a> PropertyPredictionScores<'a> {
     }
 
     fn load_ms2_model(&self) -> Result<MS2ModelWrapper> {
+        let model_path = self
+            .parameters
+            .dl_feature_generators
+            .ms2_intensity
+            .model_path
+            .clone();
+        let const_path_str = self
+            .parameters
+            .dl_feature_generators
+            .ms2_intensity
+            .constants_path
+            .clone();
+
         let mut model = load_ms2_model(
-            &self
-                .parameters
-                .dl_feature_generators
-                .ms2_intensity
-                .model_path,
-            &self
-                .parameters
-                .dl_feature_generators
-                .ms2_intensity
-                .constants_path,
+            &model_path,
+            &const_path_str,
             &self
                 .parameters
                 .dl_feature_generators
@@ -313,6 +335,7 @@ impl<'a> PropertyPredictionScores<'a> {
                         .dl_feature_generators
                         .fine_tune_config
                         .epochs,
+                    TargetNormalization::None,
                 )?;
 
                 if self

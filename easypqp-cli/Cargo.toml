@@ -10,7 +10,7 @@ path = "src/main.rs"
 [dependencies]
 easypqp-core = { path = "../easypqp-core" }
 sage-core = { git = "https://github.com/lazear/sage", branch = "master" }
-redeem-properties = { git = "https://github.com/singjc/redeem.git", branch = "master" }
+redeem-properties = { git = "https://github.com/singjc/redeem.git", branch = "develop" }
 anyhow = "1.0"
 csv = "1"
 clap = { version="4.0", features = ["cargo", "unicode"] }

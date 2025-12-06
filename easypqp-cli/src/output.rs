@@ -57,6 +57,16 @@ pub fn write_assays_to_tsv<P: AsRef<Path>>(
         )?;
     }
 
+    // Decide whether to scale normalized RT (0-1) up to 0-100 for the TSV.
+    // Some models/consumers expect RT in a 0-100 normalized scale (AlphaPeptiDeep),
+    // while others use 0-1. Apply a harmless output-only heuristic: if the
+    // maximum predicted RT across assays is <= 1.0, scale by 100 for output.
+    let max_rt = assays
+        .iter()
+        .map(|a| a.retention_time)
+        .fold(0.0_f32, |m, v| if v > m { v } else { m });
+    let rt_scale = if max_rt > 0.0 && max_rt <= 1.0 { 100.0_f32 } else { 1.0_f32 };
+
     for assay in assays {
         let peptide_idx = assay.peptide_index as usize;
         let decoy = peptides[peptide_idx].decoy;
@@ -89,7 +99,7 @@ pub fn write_assays_to_tsv<P: AsRef<Path>>(
             non_zero_indices
         };
 
-        for &i in &product_indices {
+    for &i in &product_indices {
             let fragment_type = &assay.product.ion_type[i];
             let series_number = assay.product.ion_ordinal[i];
             let product_charge = assay.product.charge[i];
@@ -103,7 +113,7 @@ pub fn write_assays_to_tsv<P: AsRef<Path>>(
                 assay.precursor.charge,
                 product_charge,
                 assay.product.intensity[i] * 10_000.0,
-                assay.retention_time,
+                assay.retention_time * rt_scale,
                 naked_peptide,
                 modified_peptide,
                 "", "", "", "", "", "", // Placeholder columns
