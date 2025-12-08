@@ -65,7 +65,8 @@ pub fn write_assays_to_tsv<P: AsRef<Path>>(
         .iter()
         .map(|a| a.retention_time)
         .fold(0.0_f32, |m, v| if v > m { v } else { m });
-    let rt_scale = if max_rt > 0.0 && max_rt <= 1.0 { 100.0_f32 } else { 1.0_f32 };
+    // let rt_scale = if max_rt > 0.0 && max_rt <= 1.0 { 100.0_f32 } else { 1.0_f32 };
+    let rt_scale = 100.0_f32;
 
     for assay in assays {
         let peptide_idx = assay.peptide_index as usize;
@@ -73,6 +74,58 @@ pub fn write_assays_to_tsv<P: AsRef<Path>>(
         let modified_peptide = peptides[peptide_idx].to_string();
         let naked_peptide = remove_mass_shift(&modified_peptide);
         let protein = &peptides[peptide_idx].proteins;
+
+        // Parse protein entries which may be in the form `db|ACCESSION|GENE_ID` (e.g. sp|P26196|DDX6_HUMAN)
+        // We want three output columns: ProteinId (accession(s)), UniprotId (duplicate of accession(s)),
+        // and GeneName (gene id(s)). If an entry doesn't follow the pipe-separated format, fall back
+        // to using the original string for ProteinId/UniProtId and leave GeneName empty for that entry.
+        let protein_accessions: Vec<String> = protein
+            .iter()
+            .map(|p| {
+                if p.contains('|') {
+                    let parts: Vec<&str> = p.split('|').collect();
+                    if parts.len() >= 2 {
+                        parts[1].to_string()
+                    } else {
+                        p.to_string()
+                    }
+                } else {
+                    p.to_string()
+                }
+            })
+            .collect();
+
+        let protein_genes: Vec<String> = protein
+            .iter()
+            .map(|p| {
+                if p.contains('|') {
+                    let parts: Vec<&str> = p.split('|').collect();
+                    if parts.len() >= 3 {
+                        parts[2].to_string()
+                    } else {
+                        "".to_string()
+                    }
+                } else {
+                    "".to_string()
+                }
+            })
+            .filter(|s| !s.is_empty())
+            .collect();
+
+        let protein_id_field = if protein_accessions.is_empty() {
+            "".to_string()
+        } else {
+            protein_accessions.join(";")
+        };
+
+        // UniProtId will usually be the same accession(s); duplicate the accession field.
+        let uniprot_id_field = protein_id_field.clone();
+
+        let gene_name_field = if protein_genes.is_empty() {
+            "".to_string()
+        } else {
+            protein_genes.join(";")
+        };
 
         let non_zero_indices: Vec<usize> = assay.product.intensity
             .iter()
@@ -117,8 +170,9 @@ pub fn write_assays_to_tsv<P: AsRef<Path>>(
                 naked_peptide,
                 modified_peptide,
                 "", "", "", "", "", "", // Placeholder columns
-                protein.join(";"),
-                "", "", // UniprotId, GeneName
+                protein_id_field,
+                uniprot_id_field,
+                gene_name_field,
                 fragment_type,
                 series_number,
                 annotation,
