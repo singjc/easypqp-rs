@@ -21,7 +21,14 @@ pub struct InsilicoPQPSettings {
     /// Allowed fragment types (default: 'b,y'). Current MS2 prediction model only supports 'b' and 'y'
     pub allowed_fragment_types: Vec<String>,
     /// Scale factor to apply to retention times for output (e.g., 100.0 to convert 0-1 -> 0-100)
+    #[serde(default = "InsilicoPQPSettings::default_rt_scale")]
     pub rt_scale: f32,
+}
+
+impl InsilicoPQPSettings {
+    fn default_rt_scale() -> f32 {
+        100.0
+    }
 }
 
 impl Default for InsilicoPQPSettings {
