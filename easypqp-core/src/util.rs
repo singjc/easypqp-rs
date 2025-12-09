@@ -4,7 +4,8 @@ use std::path::{Path, PathBuf};
 use anyhow::Error;
 use sysinfo::System;
 
-
+/// Reads a FASTA file and returns a Fasta object.
+/// TODO: Replace with rustyms?
 pub fn read_fasta<S>(
     path: S,
     decoy_tag: S,
