@@ -82,6 +82,7 @@ jobs:
         uses: taiki-e/upload-rust-binary-action@v1
         with:
           bin: ${{ matrix.bin }}
+          package: easypqp-cli
           archive: ${{ matrix.name }}-${{ steps.tag.outputs.name }}
           target: ${{ matrix.target }}
           features: vendored-openssl
@@ -96,6 +97,7 @@ jobs:
         uses: taiki-e/upload-rust-binary-action@v1
         with:
           bin: ${{ matrix.bin }}
+          package: easypqp-cli
           archive: ${{ matrix.name }}-${{ steps.tag.outputs.name }}
           target: ${{ matrix.target }}
           include: LICENSE,README.md
