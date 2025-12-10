@@ -41,9 +41,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install musl-tools (for Linux musl builds)
+      - name: Install musl-tools and dependencies (for Linux musl builds)
         if: contains(matrix.target, 'musl')
-        run: sudo apt-get install -y musl-tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y musl-tools pkg-config libssl-dev
 
       - name: Set up Rust
         uses: actions-rs/toolchain@v1
@@ -52,7 +54,15 @@ jobs:
           target: ${{ matrix.target }}
           override: true
 
-      - name: Build easypqp-insilico
+      - name: Build easypqp-insilico (with vendored OpenSSL for musl)
+        if: contains(matrix.target, 'musl')
+        env:
+          OPENSSL_STATIC: 1
+          OPENSSL_VENDORED: 1
+        run: cargo build --release --target=${{ matrix.target }} --package easypqp-cli
+
+      - name: Build easypqp-insilico (non-musl targets)
+        if: "!contains(matrix.target, 'musl')"
         run: cargo build --release --target=${{ matrix.target }} --package easypqp-cli
 
       - name: Upload release binary
@@ -65,4 +75,3 @@ jobs:
           tar: unix
           zip: windows
           token: ${{ secrets.GITHUB_TOKEN }}
-          rename: ${{ matrix.name }}
