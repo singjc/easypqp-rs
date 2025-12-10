@@ -8,6 +8,7 @@ All notable changes to this project will be documented in this file.
 
 - Enhance project metadata in pyproject.toml
 - Add PyPI version badge to README.md
+- Enhance GitHub Actions workflow for release tagging and binary uploads
 
 ### 🐛 Bug Fixes
 
@@ -15,9 +16,19 @@ All notable changes to this project will be documented in this file.
 - Switch Rust toolchain to stable and refine build/test commands
 - Update Python interpreter versions in build args and classifiers
 - Bump version to 0.1.1 in Cargo.toml and pyproject.toml files
+- Refine conditions for release job and asset uploads in GitHub Actions workflow
+- Add tag reference for binary uploads in GitHub Actions workflow
+- Move OpenSSL environment variables to non-musl upload step
+- Set OpenSSL environment variables for musl builds in GitHub Actions workflow
+- Remove OpenSSL environment setup for musl and add vendored feature in Cargo.toml
+- Add package reference for uploaded binaries in rust-release workflow
+- Update model paths and architectures for pretrained models in DLFeatureGeneratorSettings
+- Update development status classifier from 1 to 3 - Alpha in pyproject.toml
+- Configure sccache for faster Rust compilation in Python wheel build
 
 ### ⚙️ Miscellaneous Tasks
 
+- Update CHANGELOG.md
 - Update CHANGELOG.md
 
 ## [0.1.0-alpha] - 2025-12-10
