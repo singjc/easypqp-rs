@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.1] - 2025-12-10
+
+### 🚀 Features
+
+- Enhance project metadata in pyproject.toml
+- Add PyPI version badge to README.md
+
+### 🐛 Bug Fixes
+
+- Update binary name for Windows build in rust-release workflow
+- Switch Rust toolchain to stable and refine build/test commands
+- Update Python interpreter versions in build args and classifiers
+- Bump version to 0.1.1 in Cargo.toml and pyproject.toml files
+
+### ⚙️ Miscellaneous Tasks
+
+- Update CHANGELOG.md
+
 ## [0.1.0-alpha] - 2025-12-10
 
 ### 🚀 Features
