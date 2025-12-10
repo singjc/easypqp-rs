@@ -441,12 +441,15 @@ impl Input {
         max_transitions: Option<u8>,
         fragmentation_model: Option<String>,
         allowed_fragment_types: Option<Vec<String>>,
+        rt_scale: Option<f32>,
         fine_tune: Option<bool>,
         train_data_path: Option<String>,
         save_model: Option<bool>,
         instrument: Option<String>,
         nce: Option<f32>,
         batch_size: Option<usize>,
+        write_report: Option<bool>,
+        parquet_output: Option<bool>,
     ) -> Result<Self> {
         // Check if it's a path to an existing file
         let mut input: Input = if Path::new(path).exists() {
@@ -488,6 +491,9 @@ impl Input {
         if let Some(allowed_fragment_types) = allowed_fragment_types {
             input.insilico_settings.allowed_fragment_types = allowed_fragment_types;
         }
+        if let Some(rt_scale) = rt_scale {
+            input.insilico_settings.rt_scale = rt_scale;
+        }
         if let Some(fine_tune) = fine_tune {
             input.dl_feature_generators.clone().unwrap().fine_tune_config.unwrap().fine_tune = fine_tune;
         }
@@ -506,6 +512,12 @@ impl Input {
         if let Some(batch_size) = batch_size {
             input.dl_feature_generators.clone().unwrap().fine_tune_config.unwrap().batch_size = batch_size;
         }
+        if let Some(write_report) = write_report {
+            input.write_report = Some(write_report);
+        }
+        if let Some(parquet_output) = parquet_output {
+            input.parquet_output = Some(parquet_output);
+        }
 
         // avoid to later panic if these parameters are not set (but doesn't check if files exist)
         ensure!(
@@ -522,6 +534,12 @@ impl Input {
 
     pub fn build(self) -> anyhow::Result<InsilicoPQP> {
         let database = self.database.make_parameters();
+        
+        let parquet_output = self.parquet_output.unwrap_or(false);
+        let default_extension = if parquet_output { "parquet" } else { "tsv" };
+        let output_file = self.output_file.clone().unwrap_or_else(|| {
+            format!("insilico_library.{}", default_extension)
+        });
 
         Ok(InsilicoPQP {
             version: clap::crate_version!().into(),
@@ -532,12 +550,9 @@ impl Input {
                 .map(Into::into)
                 .unwrap_or_default(),
             peptide_chunking: self.peptide_chunking.clone(),
-            output_file: self
-                .output_file
-                .clone()
-                .unwrap_or_else(|| "insilico_library.tsv".into()),
+            output_file,
             write_report: self.write_report.unwrap_or(true),
-            parquet_output: self.parquet_output.unwrap_or(false),
+            parquet_output,
         })
     }
 }

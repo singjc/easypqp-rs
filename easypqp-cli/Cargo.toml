@@ -26,6 +26,7 @@ arrow = { version = "57.1.0", optional = true }
 parquet = { version = "57.1.0", optional = true }
 
 [features]
+default = ["parquet"]
 parquet = ["arrow", "dep:parquet"]
 
 [dev-dependencies]
