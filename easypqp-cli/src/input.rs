@@ -331,6 +331,7 @@ pub struct Input {
 /// This mirrors the Input struct but only includes fields we control
 #[derive(JsonSchema)]
 #[schemars(title = "EasyPQP Configuration", description = "JSON configuration file for in-silico peptide library generation")]
+#[allow(dead_code)]
 struct InputSchema {
     /// Database and digestion parameters (REQUIRED)
     /// Fields: fasta (required), enzyme, peptide_min_mass, peptide_max_mass, 
@@ -366,6 +367,7 @@ struct InputSchema {
 /// Schema representation of database configuration
 #[derive(JsonSchema)]
 #[schemars(description = "Database and protein digestion configuration")]
+#[allow(dead_code)]
 struct DatabaseSchema {
     /// Path to FASTA protein database file (REQUIRED)
     fasta: String,
