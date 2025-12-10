@@ -77,6 +77,13 @@ jobs:
           fi
         shell: bash
 
+      - name: Set OpenSSL env for musl
+        if: contains(matrix.target, 'musl')
+        run: |
+          echo "OPENSSL_STATIC=1" >> $GITHUB_ENV
+          echo "OPENSSL_VENDORED=1" >> $GITHUB_ENV
+        shell: bash
+
       - name: Upload release binary (musl with vendored OpenSSL)
         if: contains(matrix.target, 'musl')
         uses: taiki-e/upload-rust-binary-action@v1
@@ -89,9 +96,6 @@ jobs:
           zip: windows
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: refs/tags/${{ steps.tag.outputs.name }}
-        env:
-          OPENSSL_STATIC: 1
-          OPENSSL_VENDORED: 1
 
       - name: Upload release binary (non-musl)
         if: "!contains(matrix.target, 'musl')"
