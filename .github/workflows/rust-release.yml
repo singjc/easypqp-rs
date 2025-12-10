@@ -54,17 +54,6 @@ jobs:
           target: ${{ matrix.target }}
           override: true
 
-      - name: Build easypqp-insilico (with vendored OpenSSL for musl)
-        if: contains(matrix.target, 'musl')
-        env:
-          OPENSSL_STATIC: 1
-          OPENSSL_VENDORED: 1
-        run: cargo build --release --target=${{ matrix.target }} --package easypqp-cli
-
-      - name: Build easypqp-insilico (non-musl targets)
-        if: "!contains(matrix.target, 'musl')"
-        run: cargo build --release --target=${{ matrix.target }} --package easypqp-cli
-
       - name: Upload release binary
         uses: taiki-e/upload-rust-binary-action@v1
         env:
