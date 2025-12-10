@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.2] - 2025-12-10
+
+### 🐛 Bug Fixes
+
+- Add manylinux support and allow manual workflow dispatch for PyPI publishing
+- Update package version to 0.1.2 in Cargo.toml and pyproject.toml files
+
+### ⚙️ Miscellaneous Tasks
+
+- Update CHANGELOG.md
+
 ## [0.1.1] - 2025-12-10
 
 ### 🚀 Features
