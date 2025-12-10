@@ -7,15 +7,26 @@ on:
   push:
     tags:
       - v[0-9]+.*
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag/version to release (e.g., v0.1.0)'
+        required: true
+        type: string
 
 jobs:
   create-release:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+      
       - uses: taiki-e/create-gh-release-action@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+        env:
+          GITHUB_REF: ${{ github.event.inputs.tag && format('refs/tags/{0}', github.event.inputs.tag) || github.ref }}
 
   upload-assets:
     needs: create-release
@@ -40,6 +51,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
 
       - name: Install musl-tools and dependencies (for Linux musl builds)
         if: contains(matrix.target, 'musl')
@@ -54,14 +67,37 @@ jobs:
           target: ${{ matrix.target }}
           override: true
 
-      - name: Upload release binary
+      - name: Set tag name
+        id: tag
+        run: |
+          if [ -n "${{ github.event.inputs.tag }}" ]; then
+            echo "name=${{ github.event.inputs.tag }}" >> $GITHUB_OUTPUT
+          else
+            echo "name=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          fi
+        shell: bash
+
+      - name: Upload release binary (musl with vendored OpenSSL)
+        if: contains(matrix.target, 'musl')
         uses: taiki-e/upload-rust-binary-action@v1
         env:
-          OPENSSL_STATIC: ${{ contains(matrix.target, 'musl') && '1' || '' }}
-          OPENSSL_VENDORED: ${{ contains(matrix.target, 'musl') && '1' || '' }}
+          OPENSSL_STATIC: 1
+          OPENSSL_VENDORED: 1
         with:
           bin: ${{ matrix.bin }}
-          archive: ${{ matrix.name }}-${{ github.ref_name }}
+          archive: ${{ matrix.name }}-${{ steps.tag.outputs.name }}
+          target: ${{ matrix.target }}
+          include: LICENSE,README.md
+          tar: unix
+          zip: windows
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload release binary (non-musl)
+        if: "!contains(matrix.target, 'musl')"
+        uses: taiki-e/upload-rust-binary-action@v1
+        with:
+          bin: ${{ matrix.bin }}
+          archive: ${{ matrix.name }}-${{ steps.tag.outputs.name }}
           target: ${{ matrix.target }}
           include: LICENSE,README.md
           tar: unix
