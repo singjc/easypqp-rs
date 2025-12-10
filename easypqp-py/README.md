@@ -1,5 +1,8 @@
 # easypqp-py: Python Bindings for EasyPQP
 
+[![PyPI - Version](https://img.shields.io/pypi/v/easypqp-rs)](https://pypi.org/project/easypqp-rs/)
+
+
 Python bindings for [EasyPQP rust library](https://github.com/justinsing/easypqp-rs). Currently, the rust library is mainly used for in-silico peptide query parameter generation.
 
 ## Prerequisites
