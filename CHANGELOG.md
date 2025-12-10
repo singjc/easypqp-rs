@@ -9,9 +9,11 @@ All notable changes to this project will be documented in this file.
 - Add manylinux support and allow manual workflow dispatch for PyPI publishing
 - Update package version to 0.1.2 in Cargo.toml and pyproject.toml files
 - Improve sccache setup and build steps for better clarity and organization
+- Add vendored-openssl feature for improved compatibility in Python wheel builds
 
 ### ⚙️ Miscellaneous Tasks
 
+- Update CHANGELOG.md
 - Update CHANGELOG.md
 - Update CHANGELOG.md
 
