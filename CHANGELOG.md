@@ -10,12 +10,15 @@ All notable changes to this project will be documented in this file.
 - Update package version to 0.1.2 in Cargo.toml and pyproject.toml files
 - Improve sccache setup and build steps for better clarity and organization
 - Add vendored-openssl feature for improved compatibility in Python wheel builds
+- Update manylinux version to 2_28 for improved compatibility in wheel builds
 
 ### ⚙️ Miscellaneous Tasks
 
 - Update CHANGELOG.md
 - Update CHANGELOG.md
 - Update CHANGELOG.md
+- Update CHANGELOG.md
+- Add concurrency settings to rust-release workflow
 
 ## [0.1.1] - 2025-12-10
 
