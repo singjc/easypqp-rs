@@ -3,11 +3,13 @@ use std::{collections::HashMap, path::Path};
 use anyhow::{ensure, Context, Result};
 use clap::ArgMatches;
 use serde::{Deserialize, Serialize};
+use schemars::{JsonSchema, schema_for};
 use sage_core::{database::{Builder, EnzymeBuilder, Parameters}, modification::ModificationSpecificity};
 use easypqp_core::{util::auto_chunk_size, InsilicoPQPSettings};
 
 
-#[derive(Serialize, Deserialize, Clone, Copy, Debug)]
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, JsonSchema)]
+#[schemars(description = "Peptide chunking strategy for memory management")]
 pub struct ChunkingStrategy(pub usize);
 
 
@@ -41,10 +43,16 @@ pub struct InsilicoPQP {
     pub parquet_output: bool,
 }
 
-#[derive(Serialize, Deserialize, Default, Debug, Clone)]
+#[derive(Serialize, Deserialize, Default, Debug, Clone, JsonSchema)]
+#[schemars(description = "Deep learning model file paths")]
 pub struct DLModel {
+    /// Path to model weights file (.pth or .safetensors)
     pub model_path: String,
+    
+    /// Path to model constants YAML file
     pub constants_path: String,
+    
+    /// Path to model architecture Python file
     pub architecture: String,
 }
 
@@ -66,16 +74,28 @@ pub struct FineTuneOptions {
     pub save_model: Option<bool>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, JsonSchema)]
+#[schemars(description = "Fine-tuning configuration for transfer learning")]
 pub struct FineTuneSettings {
+    /// Enable fine-tuning
     pub fine_tune: bool,
+    
+    /// Path to training data TSV file
     pub train_data_path: String,
+    
+    /// Batch size for training
     #[serde(default = "FineTuneSettings::default_batch_size")]
     pub batch_size: usize,
+    
+    /// Number of training epochs
     #[serde(default = "FineTuneSettings::default_epochs")]
     pub epochs: usize,
+    
+    /// Learning rate
     #[serde(default = "FineTuneSettings::default_learning_rate")]
     pub learning_rate: f64,
+    
+    /// Save fine-tuned model to disk
     #[serde(default = "FineTuneSettings::default_save_model")]
     pub save_model: bool,
 }
@@ -132,15 +152,39 @@ impl From<FineTuneOptions> for FineTuneSettings {
     }
 }
 
-#[derive(Serialize, Deserialize, Default, Debug, Clone)]
+#[derive(Serialize, Deserialize, Default, Debug, Clone, JsonSchema)]
+#[schemars(description = "Deep learning model configuration for property prediction")]
 pub struct DLFeatureGenerators {
+    /// Retention time prediction model
+    #[schemars(description = "Custom RT model (model_path, constants_path, architecture)")]
     pub retention_time: Option<DLModel>,
+    
+    /// Ion mobility prediction model
+    #[schemars(description = "Custom IM/CCS model (model_path, constants_path, architecture)")]
     pub ion_mobility: Option<DLModel>,
+    
+    /// MS2 intensity prediction model
+    #[schemars(description = "Custom MS2 model (model_path, constants_path, architecture)")]
     pub ms2_intensity: Option<DLModel>,
+    
+    /// Compute device
+    #[schemars(description = "Device for inference: 'cpu', 'cuda', or 'mps' (default: 'cpu')")]
     pub device: Option<String>,
+    
+    /// Fine-tuning configuration
+    #[schemars(description = "Optional fine-tuning settings for transfer learning")]
     pub fine_tune_config: Option<FineTuneSettings>,
+    
+    /// Instrument type
+    #[schemars(description = "Instrument type: 'QE' or 'timsTOF' (default: 'timsTOF')")]
     pub instrument: Option<String>,
+    
+    /// Normalized collision energy
+    #[schemars(description = "NCE value for fragmentation (default: 20.0)")]
     pub nce: Option<f32>,
+    
+    /// Inference batch size
+    #[schemars(description = "Batch size for model inference (default: 64)")]
     pub batch_size: Option<usize>,
 }
 
@@ -279,6 +323,67 @@ pub struct Input {
     pub output_file: Option<String>,
     pub write_report: Option<bool>,
     pub parquet_output: Option<bool>,
+}
+
+/// Documentation-only struct for generating JSON schema help
+/// This mirrors the Input struct but only includes fields we control
+#[derive(JsonSchema)]
+#[schemars(title = "EasyPQP Configuration", description = "JSON configuration file for in-silico peptide library generation")]
+struct InputSchema {
+    /// Database and digestion parameters (REQUIRED)
+    /// Fields: fasta (required), enzyme, peptide_min_mass, peptide_max_mass, 
+    /// static_mods, variable_mods, max_variable_mods, generate_decoys, decoy_tag
+    #[schemars(description = "FASTA database path and digestion settings (enzyme, modifications, decoys)")]
+    database: DatabaseSchema,
+    
+    /// In-silico library generation settings (REQUIRED)
+    #[schemars(description = "Precursor charges, fragment charges, transition limits, fragmentation model, and RT scaling")]
+    insilico_settings: InsilicoPQPSettings,
+    
+    /// Deep learning feature prediction models (OPTIONAL)
+    #[schemars(description = "Custom model paths for RT/IM/MS2 prediction. If omitted, pretrained AlphaPeptDeep models will be auto-downloaded")]
+    dl_feature_generators: Option<DLFeatureGenerators>,
+    
+    /// Peptide chunking strategy for memory management
+    #[schemars(description = "Number of peptides per chunk (default: 0 = auto-calculate based on available memory)")]
+    peptide_chunking: ChunkingStrategy,
+    
+    /// Output file path
+    #[schemars(description = "Path for output TSV file (default: 'insilico_library.tsv')")]
+    output_file: Option<String>,
+    
+    /// Generate HTML report
+    #[schemars(description = "Whether to generate an HTML quality report (default: true)")]
+    write_report: Option<bool>,
+    
+    /// Output in Parquet format
+    #[schemars(description = "Generate output in Parquet format instead of TSV (default: false)")]
+    parquet_output: Option<bool>,
+}
+
+/// Schema representation of database configuration
+#[derive(JsonSchema)]
+#[schemars(description = "Database and protein digestion configuration")]
+struct DatabaseSchema {
+    /// Path to FASTA protein database file (REQUIRED)
+    fasta: String,
+    
+    /// Generate decoy peptides (default: true)
+    #[schemars(description = "Auto-generate decoy sequences")]
+    generate_decoys: Option<bool>,
+    
+    /// Decoy protein tag/prefix (default: "rev_")
+    #[schemars(description = "Prefix for decoy protein names")]
+    decoy_tag: Option<String>,
+    
+    /// Minimum peptide mass in Daltons (default: 500.0)
+    peptide_min_mass: Option<f32>,
+    
+    /// Maximum peptide mass in Daltons (default: 5000.0)
+    peptide_max_mass: Option<f32>,
+    
+    /// Maximum number of variable modifications per peptide (default: 2)
+    max_variable_mods: Option<usize>,
 }
 
 impl Input {
@@ -488,4 +593,57 @@ impl InsilicoPQP {
             write_report: self.write_report,
         }
     }
+}
+/// Print detailed help about the JSON configuration file structure
+/// This automatically generates help from the struct definitions and doc comments
+pub fn print_config_help() {
+    let schema = schema_for!(InputSchema);
+    
+    println!("═══════════════════════════════════════════════════════════════════════════════");
+    println!("                  JSON CONFIGURATION FILE STRUCTURE");
+    println!("═══════════════════════════════════════════════════════════════════════════════\n");
+    
+    if let Some(description) = &schema.schema.metadata.as_ref().and_then(|m| m.description.as_ref()) {
+        println!("{}\n", description);
+    }
+    
+    // Print schema in a readable format
+    let json = serde_json::to_string_pretty(&schema).unwrap();
+    println!("JSON Schema:");
+    println!("{}\n", json);
+    
+    println!("═══════════════════════════════════════════════════════════════════════════════");
+    println!("MINIMAL EXAMPLE:");
+    println!("═══════════════════════════════════════════════════════════════════════════════");
+    println!("{{");
+    println!("  \"database\": {{");
+    println!("    \"fasta\": \"proteins.fasta\"");
+    println!("  }},");
+    println!("  \"insilico_settings\": {{");
+    println!("    \"precursor_charge\": [2, 3]");
+    println!("  }}");
+    println!("}}\n");
+    
+    println!("═══════════════════════════════════════════════════════════════════════════════");
+    println!("FULL EXAMPLE:");
+    println!("═══════════════════════════════════════════════════════════════════════════════");
+    println!("{{");
+    println!("  \"database\": {{");
+    println!("    \"fasta\": \"proteins.fasta\",");
+    println!("    \"generate_decoys\": true,");
+    println!("    \"static_mods\": {{ \"C\": 57.021464 }}");
+    println!("  }},");
+    println!("  \"insilico_settings\": {{");
+    println!("    \"precursor_charge\": [2, 3, 4],");
+    println!("    \"fragmentation_model\": \"cid_hcd\",");
+    println!("    \"rt_scale\": 100.0");
+    println!("  }},");
+    println!("  \"dl_feature_generators\": {{");
+    println!("    \"instrument\": \"timsTOF\",");
+    println!("    \"nce\": 25.0");
+    println!("  }},");
+    println!("  \"output_file\": \"my_library.tsv\"");
+    println!("}}\n");
+    
+    println!("For more information: https://github.com/singjc/easypqp-rs\n");
 }

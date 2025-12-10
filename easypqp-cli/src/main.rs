@@ -18,10 +18,16 @@ fn main() -> anyhow::Result<()> {
         .about("\u{1F52E} EasyPQP \u{1F9D9} - In-silico Peptide query parameter generation")
         .arg(
             Arg::new("parameters")
-                .required(true)
+                .required_unless_present("config-help")
                 .value_parser(clap::builder::NonEmptyStringValueParser::new())
                 .help("Path to configuration parameters (JSON file)")
                 .value_hint(ValueHint::FilePath),
+        )
+        .arg(
+            Arg::new("config-help")
+                .long("config-help")
+                .help("Show detailed help for the JSON configuration file structure")
+                .action(clap::ArgAction::SetTrue),
         )
         .arg(
             Arg::new("fasta")
@@ -64,6 +70,12 @@ fn main() -> anyhow::Result<()> {
              {all-args}{after-help}",
         )
         .get_matches();
+
+    // Handle --config-help flag
+    if matches.get_flag("config-help") {
+        input::print_config_help();
+        return Ok(());
+    }
 
     // Not supported yet
     // let parquet = matches.get_one::<bool>("parquet").copied().unwrap_or(false);

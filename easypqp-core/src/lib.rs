@@ -1,27 +1,42 @@
 use rustyms::{fragment::FragmentKind, FragmentationModel};
 use serde::{Deserialize, Serialize};
+use schemars::JsonSchema;
 
 pub mod property_prediction;
 pub mod tuning_data;
 pub mod util;
 
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, JsonSchema)]
+#[schemars(description = "In-silico spectral library generation settings")]
 pub struct InsilicoPQPSettings {
-    /// Precursor charge states to consider
+    /// Precursor charge states to consider (e.g., [2, 3])
+    #[schemars(description = "List of precursor charge states (default: [2, 3])")]
     pub precursor_charge: Vec<u8>,
+    
     /// Maximum charge state of fragment ions to consider. Current MS2 prediction model only supports z=[1,2]
+    #[schemars(description = "Max fragment ion charge state (default: 2)")]
     pub max_fragment_charge: usize,
+    
     /// Minimum number of transitions to consider for a peptide
+    #[schemars(description = "Min transitions per peptide (default: 6)")]
     pub min_transitions: u8,
+    
     /// Maximum number of transitions to consider for a peptide
+    #[schemars(description = "Max transitions per peptide, 0 = all (default: 6)")]
     pub max_transitions: u8,
+    
     /// Fragmentation model, (etd/td_etd/ethcd/etcad/eacid/ead/hcd/cid/all/none). See: `[FragmentationModel](https://docs.rs/rustyms/latest/rustyms/model/struct.FragmentationModel.html#method.etd)`
+    #[schemars(description = "Fragmentation type: 'hcd', 'cid', 'cid_hcd', etc. (default: 'cid_hcd')")]
     pub fragmentation_model: String,
+    
     /// Allowed fragment types (default: 'b,y'). Current MS2 prediction model only supports 'b' and 'y'
+    #[schemars(description = "Fragment ion types, e.g., ['b', 'y'] (default: ['b', 'y'])")]
     pub allowed_fragment_types: Vec<String>,
+    
     /// Scale factor to apply to retention times for output (e.g., 100.0 to convert 0-1 -> 0-100)
     #[serde(default = "InsilicoPQPSettings::default_rt_scale")]
+    #[schemars(description = "RT output scaling factor (default: 100.0)")]
     pub rt_scale: f32,
 }
 
