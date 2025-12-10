@@ -12,6 +12,7 @@ All notable changes to this project will be documented in this file.
 - Add vendored-openssl feature for improved compatibility in Python wheel builds
 - Update manylinux version to 2_28 for improved compatibility in wheel builds
 - Update manylinux version to 2_35 and add before-script for dependencies
+- Update package manager command for installing perl-IPC-Cmd in manylinux build
 
 ### ⚙️ Miscellaneous Tasks
 
@@ -20,6 +21,7 @@ All notable changes to this project will be documented in this file.
 - Update CHANGELOG.md
 - Update CHANGELOG.md
 - Add concurrency settings to rust-release workflow
+- Update CHANGELOG.md
 - Update CHANGELOG.md
 
 ## [0.1.1] - 2025-12-10
