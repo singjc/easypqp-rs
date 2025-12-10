@@ -6,9 +6,27 @@ build-backend = "maturin"
 name = "easypqp-rs"
 version = "0.1.0"
 description = "Python bindings for EasyPQP-rs"
+readme = "README.md"
 requires-python = ">=3.9"
+license = { text = "BSD-3-Clause" }
+authors = [
+    { name = "Justin Sing", email = "justincsing@gmail.com" }
+]
+keywords = ["mass-spectrometry", "bioinformatics", "proteomics"]
 classifiers = [
+    "Development Status :: 1 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: BSD License",
     "Programming Language :: Rust",
     "Programming Language :: Python :: Implementation :: PyPy",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
 ]
 
+[project.urls]
+Homepage = "https://github.com/singjc/easypqp-rs"
+Repository = "https://github.com/singjc/easypqp-rs"
+Documentation = "https://github.com/singjc/easypqp-rs"
