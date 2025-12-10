@@ -8,9 +8,11 @@ All notable changes to this project will be documented in this file.
 
 - Add manylinux support and allow manual workflow dispatch for PyPI publishing
 - Update package version to 0.1.2 in Cargo.toml and pyproject.toml files
+- Improve sccache setup and build steps for better clarity and organization
 
 ### ⚙️ Miscellaneous Tasks
 
+- Update CHANGELOG.md
 - Update CHANGELOG.md
 
 ## [0.1.1] - 2025-12-10
