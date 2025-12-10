@@ -91,6 +91,7 @@ jobs:
           tar: unix
           zip: windows
           token: ${{ secrets.GITHUB_TOKEN }}
+          ref: refs/tags/${{ steps.tag.outputs.name }}
 
       - name: Upload release binary (non-musl)
         if: "!contains(matrix.target, 'musl')"
@@ -103,3 +104,4 @@ jobs:
           tar: unix
           zip: windows
           token: ${{ secrets.GITHUB_TOKEN }}
+          ref: refs/tags/${{ steps.tag.outputs.name }}
