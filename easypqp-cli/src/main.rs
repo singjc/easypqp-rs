@@ -15,7 +15,7 @@ fn main() -> anyhow::Result<()> {
     let matches = Command::new("easypqp")
         .version(clap::crate_version!())
         .author("Justin Sing <justincsing@gmail.com>")
-        .about("\u{1F52E} EasyPQP \u{1F9D9} - In-silico Peptide query parameter generation")
+        .about("EasyPQP - In-silico Peptide query parameter generation")
         .arg(
             Arg::new("parameters")
                 .required_unless_present("config-help")
