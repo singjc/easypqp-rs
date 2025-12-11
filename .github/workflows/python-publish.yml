@@ -55,8 +55,6 @@ jobs:
           command: build
           args: --release -o dist --features vendored-openssl --interpreter python3.10 python3.11 python3.12 python3.13 --manifest-path easypqp-py/Cargo.toml
           manylinux: 2_35
-          before-script-linux: |
-            dnf install -y perl-IPC-Cmd
       
       - name: Build wheels (Windows/macOS)
         if: matrix.os != 'ubuntu-latest'
