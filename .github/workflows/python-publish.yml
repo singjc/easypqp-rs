@@ -54,7 +54,7 @@ jobs:
           maturin-version: latest
           command: build
           args: --release -o dist --features vendored-openssl --interpreter python3.10 python3.11 python3.12 python3.13 --manifest-path easypqp-py/Cargo.toml
-          container: quay.io/pypa/manylinux_2_35_x86_64:latest
+          manylinux: 2_31
           before-script-linux: |
             dnf install -y perl-IPC-Cmd
               sudo yum install -y perl-IPC-Cmd
