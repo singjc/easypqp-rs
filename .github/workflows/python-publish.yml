@@ -31,7 +31,7 @@ jobs:
           args: --release -o dist --features vendored-openssl --interpreter 3.10 3.11 3.12 3.13 --manifest-path easypqp-py/Cargo.toml
           container: quay.io/pypa/manylinux_2_28_x86_64:latest
           before-script-linux: |
-            dnf install -y perl-core perl-FindBin perl-File-Compare perl-IPC-Cmd
+            dnf install -y perl-core
       
       - name: Build wheels (Windows/macOS)
         if: matrix.os != 'ubuntu-latest'
