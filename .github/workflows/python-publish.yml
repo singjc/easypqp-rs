@@ -6,13 +6,6 @@ on:
       - 'v*'
   workflow_dispatch:
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
-permissions:
-  contents: read
-
 jobs:
   build-wheels:
     name: Build wheels on ${{ matrix.os }}
@@ -22,39 +15,21 @@ jobs:
         os: [ubuntu-latest, windows-latest, macos-latest]
 
     steps:
-      - name: Checkout source
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
       
       - name: Set up Rust
         uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           toolchain: stable
-          cache: true
       
-      # Use sccache for faster compilation (Windows and macOS only, not Linux/manylinux)
-      - name: Setup sccache
-        if: matrix.os != 'ubuntu-latest'
-        uses: mozilla-actions/sccache-action@v0.0.6
-      
-      - name: Configure sccache
-        if: matrix.os != 'ubuntu-latest'
-        run: |
-          echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
-          echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
-        shell: bash
-      
-      - name: Clean build cache for Linux
-        if: matrix.os == 'ubuntu-latest'
-        run: cargo clean
-        
-      - name: Build wheels (Linux with manylinux)
+      - name: Build wheels (Linux)
         if: matrix.os == 'ubuntu-latest'
         uses: PyO3/maturin-action@v1
         with:
           maturin-version: latest
           command: build
-          args: --release -o dist --features vendored-openssl --interpreter python3.10 python3.11 python3.12 python3.13 --manifest-path easypqp-py/Cargo.toml
-          manylinux: 2_35
+          args: --release -o dist --features vendored-openssl --manifest-path easypqp-py/Cargo.toml
+          container: quay.io/pypa/manylinux_2_28_x86_64:latest
       
       - name: Build wheels (Windows/macOS)
         if: matrix.os != 'ubuntu-latest'
@@ -62,10 +37,8 @@ jobs:
         with:
           maturin-version: latest
           command: build
-          args: --release -o dist --interpreter python3.10 python3.11 python3.12 python3.13 --manifest-path easypqp-py/Cargo.toml
-        env:
-          RUSTC_WRAPPER: sccache
-          SCCACHE_GHA_ENABLED: "true"
+          args: --release -o dist --manifest-path easypqp-py/Cargo.toml
+          working-directory: .
           
       - name: Upload wheels
         uses: actions/upload-artifact@v4
@@ -80,8 +53,7 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     
     steps:
-      - name: Download all wheels
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
           pattern: wheels-*
           merge-multiple: true
