@@ -2,6 +2,30 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.3] - 2025-12-11
+
+### 🐛 Bug Fixes
+
+- Update manylinux container and add Perl dependencies installation
+- Clean build cache for Linux and streamline Perl dependencies installation
+- Update manylinux version and adjust Perl dependency installation
+- Update manylinux version to 2_35 and adjust Perl dependency installation
+- Specify manylinux version and remove Perl dependency installation step
+- Simplify workflow by removing unused concurrency and permissions settings
+- Add Python interpreter versions to build arguments for wheels
+- Add Perl dependency installation step for Linux wheel builds
+- Add missing Perl dependencies for Linux wheel builds
+- Remove unnecessary Perl dependencies for Linux wheel builds
+- Update package version to 0.1.3 in Cargo.toml and pyproject.toml files
+
+### 📚 Documentation
+
+- Expand README with comprehensive configuration reference and examples
+
+### ⚙️ Miscellaneous Tasks
+
+- Update CHANGELOG.md
+
 ## [0.1.2] - 2025-12-11
 
 ### 🐛 Bug Fixes
