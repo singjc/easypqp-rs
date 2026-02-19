@@ -2,6 +2,38 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.6] - 2026-02-19
+
+### 🚀 Features
+
+- Add UniMod database parser and mass-bracket re-annotation functionality
+- Integrate UniMod database for peptide modification reannotation in TSV output
+- Add decoy tag support in TSV output and Parquet writer initialization
+- Enhance UniMod integration with custom XML support and additional parameters
+- Add UniMod reannotation options and custom XML path to settings
+- Add peptide offset handling for globally unique IDs in TSV output
+
+### 🐛 Bug Fixes
+
+- Update enzyme configuration in config.json for min/max lengths and add missing fields
+- Refactor N-terminal dash removal in peptide processing
+- Update parameter handling to allow defaults when no config file is provided
+- Update Rust base image version to 1.88-slim in Dockerfile
+- Update precursor m/z calculation using MolecularCharge for improved accuracy
+
+### 💼 Other
+
+- Unimod xml database
+
+### 🚜 Refactor
+
+- Streamline fine-tune configuration handling and remove unused namespace stripping
+
+### ⚙️ Miscellaneous Tasks
+
+- Update CHANGELOG.md
+- Bump version to 0.1.6 in Cargo.toml and pyproject.toml files
+
 ## [0.1.5] - 2025-12-11
 
 ### 🐛 Bug Fixes
