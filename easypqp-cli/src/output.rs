@@ -6,6 +6,7 @@ use easypqp_core::{InsilicoPQPSettings, PeptideProperties};
 use redeem_properties::utils::peptdeep_utils::remove_mass_shift;
 use sage_core::peptide::Peptide;
 use anyhow::Result;
+
 use csv::ReaderBuilder;
 use std::fs::File;
 use std::io::BufReader;
@@ -28,6 +29,16 @@ use parquet::arrow::ArrowWriter;
 #[cfg(feature = "parquet")]
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 
+/// Sage annotates N-terminal modifications with a leading dash, e.g.
+/// `[+42.0106]-MAGIR`. After `remove_mass_shift` strips the modification
+/// tag, the naked sequence is left as `-MAGIR`. This helper removes that
+/// leading dash so the PeptideSequence column contains just `MAGIR`.
+fn clean_nterm_dash(seq: &str) -> String {
+    if seq.starts_with('-') {
+        return seq[1..].to_string();
+    }
+    seq.to_string()
+}
 
 pub fn write_assays_to_tsv<P: AsRef<Path>>(
     assays: &[PeptideProperties],
@@ -94,7 +105,7 @@ pub fn write_assays_to_tsv<P: AsRef<Path>>(
         let peptide_idx = assay.peptide_index as usize;
         let decoy = peptides[peptide_idx].decoy;
         let modified_peptide = peptides[peptide_idx].to_string();
-        let naked_peptide = remove_mass_shift(&modified_peptide);
+        let naked_peptide = clean_nterm_dash(&remove_mass_shift(&modified_peptide));
         let protein = &peptides[peptide_idx].proteins;
 
         // Parse protein entries which may be in the form `db|ACCESSION|GENE_ID` (e.g. sp|P26196|DDX6_HUMAN)
@@ -288,7 +299,7 @@ impl ParquetChunkWriter {
             let peptide_global_idx = self.next_peptide_offset + local_peptide_idx;
             let decoy_flag = peptides[local_peptide_idx].decoy as i32;
             let modified_peptide = peptides[local_peptide_idx].to_string();
-            let naked_peptide = remove_mass_shift(&modified_peptide);
+            let naked_peptide = clean_nterm_dash(&remove_mass_shift(&modified_peptide));
             let protein = &peptides[local_peptide_idx].proteins;
 
             let protein_accessions: Vec<String> = protein
