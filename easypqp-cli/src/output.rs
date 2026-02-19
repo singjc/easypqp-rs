@@ -285,7 +285,12 @@ impl ParquetChunkWriter {
         let writer = ArrowWriter::try_new(file, schema.clone(), None)?;
 
         let unimod_db = if insilico_settings.unimod_annotation {
-            Some(UnimodDb::from_embedded(insilico_settings.max_delta_unimod)?)
+            let db = if let Some(ref xml_path) = insilico_settings.unimod_xml_path {
+                UnimodDb::from_file(xml_path, insilico_settings.max_delta_unimod)?
+            } else {
+                UnimodDb::from_embedded(insilico_settings.max_delta_unimod)?
+            };
+            Some(db)
         } else {
             None
         };

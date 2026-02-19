@@ -459,9 +459,15 @@ impl Runner {
 
         // Build UniMod database once for TSV output reannotation
         let unimod_db = if self.parameters.insilico_settings.unimod_annotation {
-            match UnimodDb::from_embedded(self.parameters.insilico_settings.max_delta_unimod) {
+            let db_result = if let Some(ref xml_path) = self.parameters.insilico_settings.unimod_xml_path {
+                info!("Loading custom UniMod XML from '{}'", xml_path);
+                UnimodDb::from_file(xml_path, self.parameters.insilico_settings.max_delta_unimod)
+            } else {
+                UnimodDb::from_embedded(self.parameters.insilico_settings.max_delta_unimod)
+            };
+            match db_result {
                 Ok(db) => {
-                    info!("Loaded embedded UniMod database for modification reannotation (max_delta={} Da)", self.parameters.insilico_settings.max_delta_unimod);
+                    info!("Loaded UniMod database for modification reannotation (max_delta={} Da)", self.parameters.insilico_settings.max_delta_unimod);
                     Some(db)
                 }
                 Err(e) => {

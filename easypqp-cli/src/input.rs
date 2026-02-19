@@ -457,6 +457,10 @@ impl Input {
         fragmentation_model: Option<String>,
         allowed_fragment_types: Option<Vec<String>>,
         rt_scale: Option<f32>,
+        unimod_annotation: Option<bool>,
+        max_delta_unimod: Option<f64>,
+        enable_unannotated: Option<bool>,
+        unimod_xml_path: Option<String>,
         fine_tune: Option<bool>,
         train_data_path: Option<String>,
         save_model: Option<bool>,
@@ -508,6 +512,18 @@ impl Input {
         }
         if let Some(rt_scale) = rt_scale {
             input.insilico_settings.rt_scale = rt_scale;
+        }
+        if let Some(unimod_annotation) = unimod_annotation {
+            input.insilico_settings.unimod_annotation = unimod_annotation;
+        }
+        if let Some(max_delta_unimod) = max_delta_unimod {
+            input.insilico_settings.max_delta_unimod = max_delta_unimod;
+        }
+        if let Some(enable_unannotated) = enable_unannotated {
+            input.insilico_settings.enable_unannotated = enable_unannotated;
+        }
+        if let Some(unimod_xml_path) = unimod_xml_path {
+            input.insilico_settings.unimod_xml_path = Some(unimod_xml_path);
         }
         if let Some(fine_tune) = fine_tune {
             input.dl_feature_generators.clone().unwrap().fine_tune_config.unwrap().fine_tune = fine_tune;
