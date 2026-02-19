@@ -19,6 +19,7 @@ use easypqp_core::{
 
 use crate::input::InsilicoPQP;
 use crate::output::write_assays_to_tsv;
+use easypqp_core::unimod::UnimodDb;
 
 struct PropertyPredictionScores<'a> {
     parameters: &'a InsilicoPQP,
@@ -451,7 +452,23 @@ impl Runner {
         #[cfg(feature = "parquet")]
         let mut parquet_writer = if let Some(ref p) = parquet_path {
             // instantiate parquet writer
-            Some(crate::output::ParquetChunkWriter::try_new(p)?)
+            Some(crate::output::ParquetChunkWriter::try_new(p, &self.parameters.insilico_settings)?)
+        } else {
+            None
+        };
+
+        // Build UniMod database once for TSV output reannotation
+        let unimod_db = if self.parameters.insilico_settings.unimod_annotation {
+            match UnimodDb::from_embedded(self.parameters.insilico_settings.max_delta_unimod) {
+                Ok(db) => {
+                    info!("Loaded embedded UniMod database for modification reannotation (max_delta={} Da)", self.parameters.insilico_settings.max_delta_unimod);
+                    Some(db)
+                }
+                Err(e) => {
+                    warn!("Failed to load UniMod database, skipping reannotation: {}", e);
+                    None
+                }
+            }
         } else {
             None
         };
@@ -493,6 +510,7 @@ impl Runner {
                     peptide_chunk, // use the chunk peptides, not full self.peptides
                     output_path.as_ref().unwrap(),
                     &self.parameters.insilico_settings,
+                    unimod_db.as_ref(),
                 )?;
             }
         }

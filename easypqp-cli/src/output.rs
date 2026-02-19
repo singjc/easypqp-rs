@@ -3,6 +3,7 @@ use std::io::{Write, BufWriter};
 use std::path::Path;
 
 use easypqp_core::{InsilicoPQPSettings, PeptideProperties};
+use easypqp_core::unimod::{UnimodDb, reannotate_modified_sequence};
 use redeem_properties::utils::peptdeep_utils::remove_mass_shift;
 use sage_core::peptide::Peptide;
 use anyhow::Result;
@@ -45,7 +46,8 @@ pub fn write_assays_to_tsv<P: AsRef<Path>>(
     peptides: &[Peptide],
     path: P,
     insilico_settings: &InsilicoPQPSettings,
-) -> std::io::Result<()> {
+    unimod_db: Option<&UnimodDb>,
+) -> Result<()> {
     let path = path.as_ref();
     let write_header = !path.exists() || metadata(path)?.len() == 0;
 
@@ -104,8 +106,12 @@ pub fn write_assays_to_tsv<P: AsRef<Path>>(
     for assay in assays {
         let peptide_idx = assay.peptide_index as usize;
         let decoy = peptides[peptide_idx].decoy;
-        let modified_peptide = peptides[peptide_idx].to_string();
-        let naked_peptide = clean_nterm_dash(&remove_mass_shift(&modified_peptide));
+        let raw_modified = peptides[peptide_idx].to_string();
+        let modified_peptide = match unimod_db {
+            Some(db) => reannotate_modified_sequence(&raw_modified, db, insilico_settings.enable_unannotated)?,
+            None => raw_modified,
+        };
+        let naked_peptide = clean_nterm_dash(&remove_mass_shift(&peptides[peptide_idx].to_string()));
         let protein = &peptides[peptide_idx].proteins;
 
         // Parse protein entries which may be in the form `db|ACCESSION|GENE_ID` (e.g. sp|P26196|DDX6_HUMAN)
@@ -231,11 +237,13 @@ pub struct ParquetChunkWriter {
     writer: ArrowWriter<File>,
     schema: Arc<Schema>,
     next_peptide_offset: usize,
+    unimod_db: Option<UnimodDb>,
+    enable_unannotated: bool,
 }
 
 #[cfg(feature = "parquet")]
 impl ParquetChunkWriter {
-    pub fn try_new<P: AsRef<Path>>(path: P) -> Result<Self> {
+    pub fn try_new<P: AsRef<Path>>(path: P, insilico_settings: &InsilicoPQPSettings) -> Result<Self> {
         let fields = vec![
             Field::new("PrecursorMz", DataType::Float64, false),
             Field::new("ProductMz", DataType::Float64, false),
@@ -264,7 +272,19 @@ impl ParquetChunkWriter {
         let file = File::create(path.as_ref())?;
         let writer = ArrowWriter::try_new(file, schema.clone(), None)?;
 
-        Ok(Self { writer, schema, next_peptide_offset: 0 })
+        let unimod_db = if insilico_settings.unimod_annotation {
+            Some(UnimodDb::from_embedded(insilico_settings.max_delta_unimod)?)
+        } else {
+            None
+        };
+
+        Ok(Self {
+            writer,
+            schema,
+            next_peptide_offset: 0,
+            unimod_db,
+            enable_unannotated: insilico_settings.enable_unannotated,
+        })
     }
 
     pub fn write_chunk(&mut self, assays: &[PeptideProperties], peptides: &[Peptide], insilico_settings: &InsilicoPQPSettings) -> Result<()> {
@@ -298,8 +318,12 @@ impl ParquetChunkWriter {
             let local_peptide_idx = assay.peptide_index as usize;
             let peptide_global_idx = self.next_peptide_offset + local_peptide_idx;
             let decoy_flag = peptides[local_peptide_idx].decoy as i32;
-            let modified_peptide = peptides[local_peptide_idx].to_string();
-            let naked_peptide = clean_nterm_dash(&remove_mass_shift(&modified_peptide));
+            let raw_modified = peptides[local_peptide_idx].to_string();
+            let modified_peptide = match &self.unimod_db {
+                Some(db) => reannotate_modified_sequence(&raw_modified, db, self.enable_unannotated)?,
+                None => raw_modified,
+            };
+            let naked_peptide = clean_nterm_dash(&remove_mass_shift(&peptides[local_peptide_idx].to_string()));
             let protein = &peptides[local_peptide_idx].proteins;
 
             let protein_accessions: Vec<String> = protein
