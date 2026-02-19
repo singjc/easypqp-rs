@@ -482,6 +482,8 @@ impl Runner {
         // No in-memory report accumulation: when Parquet output + report is requested
         // we'll generate the report directly from the Parquet file after closing the writer.
 
+        let mut tsv_peptide_offset: usize = 0;
+
         for (i, peptide_chunk) in self.peptides.chunks(max_chunk_size).enumerate() {
             if max_chunk_size < self.peptides.len() {
                 log::info!(
@@ -518,8 +520,12 @@ impl Runner {
                     &self.parameters.insilico_settings,
                     unimod_db.as_ref(),
                     &self.parameters.database.decoy_tag,
+                    tsv_peptide_offset,
                 )?;
             }
+
+            // Advance offset for globally unique IDs across chunks
+            tsv_peptide_offset += peptide_chunk.len();
         }
 
         // Close parquet writer if present

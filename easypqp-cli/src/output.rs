@@ -20,7 +20,7 @@ use redeem_properties::utils::peptdeep_utils::ion_mobility_to_ccs_bruker;
 use std::sync::Arc;
 
 #[cfg(feature = "parquet")]
-use arrow::array::{ArrayRef, Float64Array, Int32Array, StringArray};
+use arrow::array::{ArrayRef, Float64Array, Int32Array, Int64Array, StringArray};
 #[cfg(feature = "parquet")]
 use arrow::datatypes::{DataType, Field, Schema};
 #[cfg(feature = "parquet")]
@@ -48,6 +48,7 @@ pub fn write_assays_to_tsv<P: AsRef<Path>>(
     insilico_settings: &InsilicoPQPSettings,
     unimod_db: Option<&UnimodDb>,
     decoy_tag: &str,
+    peptide_offset: usize,
 ) -> Result<()> {
     let path = path.as_ref();
     let write_header = !path.exists() || metadata(path)?.len() == 0;
@@ -208,6 +209,13 @@ pub fn write_assays_to_tsv<P: AsRef<Path>>(
             let product_charge = assay.product.charge[i];
             let annotation = format!("{}{}^{}", fragment_type, series_number, product_charge);
 
+            // TransitionGroupId encodes both peptide and precursor charge:
+            // each (peptide, charge) pair is a unique precursor / transition group.
+            // peptide_offset ensures globally unique IDs across chunks.
+            let global_peptide_idx = peptide_offset as u64 + assay.peptide_index as u64;
+            let transition_group_id = global_peptide_idx * 10 + assay.precursor.charge as u64;
+            let transition_id = transition_group_id * 1000 + i as u64;
+
             writeln!(
                 writer,
                 "{}\t{:.4}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
@@ -228,8 +236,8 @@ pub fn write_assays_to_tsv<P: AsRef<Path>>(
                 annotation,
                 "", // CollisionEnergy
                 assay.precursor.ion_mobility,
-                assay.peptide_index,
-                assay.peptide_index * 1000 + i as u32,
+                transition_group_id,
+                transition_id,
                 decoy as i8,
                 1, 0, 1,
                 "" // Peptidoforms
@@ -272,8 +280,8 @@ impl ParquetChunkWriter {
             Field::new("FragmentSeriesNumber", DataType::Int32, false),
             Field::new("Annotation", DataType::Utf8, true),
             Field::new("PrecursorIonMobility", DataType::Float64, false),
-            Field::new("TransitionGroupId", DataType::Int32, false),
-            Field::new("TransitionId", DataType::Int32, false),
+            Field::new("TransitionGroupId", DataType::Int64, false),
+            Field::new("TransitionId", DataType::Int64, false),
             Field::new("Decoy", DataType::Int32, false),
             Field::new("DetectingTransition", DataType::Int32, false),
             Field::new("IdentifyingTransition", DataType::Int32, false),
@@ -323,8 +331,8 @@ impl ParquetChunkWriter {
         let mut v_fragment_series_number: Vec<i32> = Vec::new();
         let mut v_annotation: Vec<Option<String>> = Vec::new();
         let mut v_precursor_ion_mobility: Vec<f64> = Vec::new();
-        let mut v_transition_group_id: Vec<i32> = Vec::new();
-        let mut v_transition_id: Vec<i32> = Vec::new();
+        let mut v_transition_group_id: Vec<i64> = Vec::new();
+        let mut v_transition_id: Vec<i64> = Vec::new();
         let mut v_decoy: Vec<i32> = Vec::new();
         let mut v_detecting: Vec<i32> = Vec::new();
         let mut v_identifying: Vec<i32> = Vec::new();
@@ -427,8 +435,12 @@ impl ParquetChunkWriter {
                 v_fragment_series_number.push(series_number);
                 v_annotation.push(Some(annotation));
                 v_precursor_ion_mobility.push(assay.precursor.ion_mobility as f64);
-                v_transition_group_id.push(peptide_global_idx as i32);
-                v_transition_id.push((peptide_global_idx as i32) * 1000 + i as i32);
+                // TransitionGroupId encodes both peptide and precursor charge:
+                // each (peptide, charge) pair is a unique precursor / transition group.
+                let transition_group_id = peptide_global_idx as i64 * 10 + assay.precursor.charge as i64;
+                let transition_id = transition_group_id * 1000 + i as i64;
+                v_transition_group_id.push(transition_group_id);
+                v_transition_id.push(transition_id);
                 v_decoy.push(decoy_flag);
                 v_detecting.push(1);
                 v_identifying.push(0);
@@ -458,8 +470,8 @@ impl ParquetChunkWriter {
         let arr_fragment_series_number: ArrayRef = Arc::new(Int32Array::from(v_fragment_series_number));
         let arr_annotation: ArrayRef = Arc::new(opt_string_array(v_annotation));
         let arr_precursor_ion_mobility: ArrayRef = Arc::new(Float64Array::from(v_precursor_ion_mobility));
-        let arr_transition_group_id: ArrayRef = Arc::new(Int32Array::from(v_transition_group_id));
-        let arr_transition_id: ArrayRef = Arc::new(Int32Array::from(v_transition_id));
+        let arr_transition_group_id: ArrayRef = Arc::new(Int64Array::from(v_transition_group_id));
+        let arr_transition_id: ArrayRef = Arc::new(Int64Array::from(v_transition_id));
         let arr_decoy: ArrayRef = Arc::new(Int32Array::from(v_decoy));
         let arr_detecting: ArrayRef = Arc::new(Int32Array::from(v_detecting));
         let arr_identifying: ArrayRef = Arc::new(Int32Array::from(v_identifying));
