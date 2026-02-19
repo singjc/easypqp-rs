@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.7] - 2026-02-19
+
+### 🐛 Bug Fixes
+
+- Update model paths for pretrained models in DLFeatureGeneratorSettings
+
+### ⚙️ Miscellaneous Tasks
+
+- Update CHANGELOG.md
+
 ## [0.1.6] - 2026-02-19
 
 ### 🚀 Features
