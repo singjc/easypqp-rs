@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "easypqp-rs"
-version = "0.1.6"
+version = "0.1.7"
 description = "Python bindings for EasyPQP-rs"
 readme = "README.md"
 requires-python = ">=3.9"
