@@ -263,9 +263,9 @@ impl From<DLFeatureGenerators> for DLFeatureGeneratorSettings {
             log::info!("No model configurations provided. Will attempt to retrieve and use pretrained models.");
             let _ = redeem_properties::utils::peptdeep_utils::download_pretrained_models_exist();
             retention_time_model_config = DLModel {
-                model_path: "data/redeem_pretrained/20251205_100_epochs_min_max_rt_cnn_tf.safetensors".to_string(),
+                model_path: "data/pretrained_models/pretrained_models/redeem/20251205_100_epochs_min_max_rt_cnn_tf.safetensors".to_string(),
                 constants_path:
-                    "data/peptdeep_generic_pretrained_models/generic/rt.pth.model_const.yaml"
+                    "data/pretrained_models/pretrained_models/alphapeptdeep/generic/rt.pth.model_const.yaml"
                         .to_string(),
                 architecture: "rt_cnn_tf".to_string(),
             };
@@ -280,10 +280,10 @@ impl From<DLFeatureGenerators> for DLFeatureGeneratorSettings {
                 == "TIMSTOF".to_string()
             {
                 ion_mobility_model_config = DLModel {
-                    model_path: "data/redeem_pretrained/20251205_500_epochs_early_stopped_100_min_max_ccs_cnn_tf.safetensors"
+                    model_path: "data/pretrained_models/pretrained_models/redeem/20251205_500_epochs_early_stopped_100_min_max_ccs_cnn_tf.safetensors"
                         .to_string(),
                     constants_path:
-                        "data/peptdeep_generic_pretrained_models/generic/ccs.pth.model_const.yaml"
+                        "data/pretrained_models/pretrained_models/alphapeptdeep/generic/ccs.pth.model_const.yaml"
                             .to_string(),
                     architecture: "ccs_cnn_tf".to_string(),
                 };
@@ -291,9 +291,9 @@ impl From<DLFeatureGenerators> for DLFeatureGeneratorSettings {
             }
 
             ms2_intensity_model_config = DLModel {
-                model_path: "data/peptdeep_generic_pretrained_models/generic/ms2.pth".to_string(),
+                model_path: "data/pretrained_models/pretrained_models/alphapeptdeep/generic/ms2.pth".to_string(),
                 constants_path:
-                    "data/peptdeep_generic_pretrained_models/generic/ms2.pth.model_const.yaml"
+                    "data/pretrained_models/pretrained_models/alphapeptdeep/generic/ms2.pth.model_const.yaml"
                         .to_string(),
                 architecture: "ms2_bert".to_string(),
             };
@@ -395,23 +395,13 @@ struct DatabaseSchema {
 
 impl Input {
     /// Load parameters from a JSON file and validate them.
-    /// If no parameters file is provided, sensible defaults are used.
     pub fn from_arguments(matches: ArgMatches) -> Result<Self> {
-        let mut input = if let Some(path) = matches.get_one::<String>("parameters") {
-            Input::load(path)
-                .with_context(|| format!("Failed to read parameters from `{path}`"))?
-        } else {
-            // No config file provided — use defaults
-            Input {
-                database: Builder::default(),
-                insilico_settings: InsilicoPQPSettings::default(),
-                dl_feature_generators: None,
-                peptide_chunking: ChunkingStrategy::default(),
-                output_file: None,
-                write_report: None,
-                parquet_output: None,
-            }
-        };
+        let path = matches
+            .get_one::<String>("parameters")
+            .expect("required parameters");
+
+        let mut input = Input::load(path)
+            .with_context(|| format!("Failed to read parameters from `{path}`"))?;
 
         // Handle JSON configuration overrides
         if let Some(fasta) = matches.get_one::<String>("fasta") {
@@ -436,7 +426,7 @@ impl Input {
 
         ensure!(
             input.database.fasta.is_some(),
-            "`database.fasta` must be set via the config file or --fasta. For more information try '--help'"
+            "`database.fasta` must be set. For more information try '--help'"
         );
 
         Ok(input)
@@ -457,10 +447,6 @@ impl Input {
         fragmentation_model: Option<String>,
         allowed_fragment_types: Option<Vec<String>>,
         rt_scale: Option<f32>,
-        unimod_annotation: Option<bool>,
-        max_delta_unimod: Option<f64>,
-        enable_unannotated: Option<bool>,
-        unimod_xml_path: Option<String>,
         fine_tune: Option<bool>,
         train_data_path: Option<String>,
         save_model: Option<bool>,
@@ -513,47 +499,24 @@ impl Input {
         if let Some(rt_scale) = rt_scale {
             input.insilico_settings.rt_scale = rt_scale;
         }
-        if let Some(unimod_annotation) = unimod_annotation {
-            input.insilico_settings.unimod_annotation = unimod_annotation;
+        if let Some(fine_tune) = fine_tune {
+            input.dl_feature_generators.clone().unwrap().fine_tune_config.unwrap().fine_tune = fine_tune;
         }
-        if let Some(max_delta_unimod) = max_delta_unimod {
-            input.insilico_settings.max_delta_unimod = max_delta_unimod;
+        if let Some(train_data_path) = train_data_path {
+            input.dl_feature_generators.clone().unwrap().fine_tune_config.unwrap().train_data_path = train_data_path;
         }
-        if let Some(enable_unannotated) = enable_unannotated {
-            input.insilico_settings.enable_unannotated = enable_unannotated;
+        if let Some(save_model) = save_model {
+            input.dl_feature_generators.clone().unwrap().fine_tune_config.unwrap().save_model = save_model;
         }
-        if let Some(unimod_xml_path) = unimod_xml_path {
-            input.insilico_settings.unimod_xml_path = Some(unimod_xml_path);
+        if let Some(instrument) = instrument {
+            input.dl_feature_generators.clone().unwrap().instrument = Some(instrument);
         }
-
-        // Apply dl_feature_generators overrides, initializing the section if needed
-        if fine_tune.is_some() || train_data_path.is_some() || save_model.is_some()
-            || instrument.is_some() || nce.is_some() || batch_size.is_some()
-        {
-            let dl = input.dl_feature_generators.get_or_insert_with(DLFeatureGenerators::default);
-            if let Some(instrument) = instrument {
-                dl.instrument = Some(instrument);
-            }
-            if let Some(nce) = nce {
-                dl.nce = Some(nce);
-            }
-            if fine_tune.is_some() || train_data_path.is_some() || save_model.is_some() || batch_size.is_some() {
-                let ft = dl.fine_tune_config.get_or_insert_with(FineTuneSettings::default);
-                if let Some(fine_tune) = fine_tune {
-                    ft.fine_tune = fine_tune;
-                }
-                if let Some(train_data_path) = train_data_path {
-                    ft.train_data_path = train_data_path;
-                }
-                if let Some(save_model) = save_model {
-                    ft.save_model = save_model;
-                }
-                if let Some(batch_size) = batch_size {
-                    ft.batch_size = batch_size;
-                }
-            }
+        if let Some(nce) = nce {
+            input.dl_feature_generators.clone().unwrap().nce = Some(nce);
         }
-
+        if let Some(batch_size) = batch_size {
+            input.dl_feature_generators.clone().unwrap().fine_tune_config.unwrap().batch_size = batch_size;
+        }
         if let Some(write_report) = write_report {
             input.write_report = Some(write_report);
         }
@@ -589,8 +552,8 @@ impl Input {
             insilico_settings: self.insilico_settings.clone(),
             dl_feature_generators: self
                 .dl_feature_generators
-                .unwrap_or_default()
-                .into(),
+                .map(Into::into)
+                .unwrap_or_default(),
             peptide_chunking: self.peptide_chunking.clone(),
             output_file,
             write_report: self.write_report.unwrap_or(true),

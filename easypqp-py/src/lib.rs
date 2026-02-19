@@ -17,10 +17,6 @@ use easypqp_cli::runner::Runner;
 /// * `fragmentation_model`: Optional fragmentation model. Overrides the JSON field parameter.
 /// * `allowed_fragment_types`: Optional list of allowed fragment types. Overrides the JSON field parameter.
 /// * `rt_scale`: Optional RT scaling factor. Overrides the JSON field parameter.
-/// * `unimod_annotation`: Optional flag to enable UniMod reannotation. Overrides the JSON field parameter.
-/// * `max_delta_unimod`: Optional maximum delta mass (Da) for UniMod matching. Overrides the JSON field parameter.
-/// * `enable_unannotated`: Optional flag to keep unannotated mass brackets when UniMod match fails. Overrides the JSON field parameter.
-/// * `unimod_xml_path`: Optional path to a custom unimod.xml file. Overrides the embedded UniMod database.
 /// * `fine_tune`: Optional flag to enable fine-tuning. Overrides the JSON field parameter.
 /// * `train_data_path`: Optional path to training data. Overrides the JSON field parameter.
 /// * `save_model`: Optional flag to save the model. Overrides the JSON field parameter.
@@ -34,7 +30,7 @@ use easypqp_cli::runner::Runner;
 /// # Returns
 /// * `Ok(())` if the library generation is successful.
 #[pyfunction]
-#[pyo3(signature = (parameters, fasta=None, output_file=None, generate_decoys=None, decoy_tag=None, precursor_charge=None, max_fragment_charge=None, min_transitions=None, max_transitions=None, fragmentation_model=None, allowed_fragment_types=None, rt_scale=None, unimod_annotation=None, max_delta_unimod=None, enable_unannotated=None, unimod_xml_path=None, fine_tune=None, train_data_path=None, save_model=None, instrument=None, nce=None, batch_size=None, write_report=None, parquet_output=None, threads=None))]
+#[pyo3(signature = (parameters, fasta=None, output_file=None, generate_decoys=None, decoy_tag=None, precursor_charge=None, max_fragment_charge=None, min_transitions=None, max_transitions=None, fragmentation_model=None, allowed_fragment_types=None, rt_scale=None, fine_tune=None, train_data_path=None, save_model=None, instrument=None, nce=None, batch_size=None, write_report=None, parquet_output=None, threads=None))]
 fn generate_insilico_library(
     parameters: String,
     fasta: Option<String>,
@@ -48,10 +44,6 @@ fn generate_insilico_library(
     fragmentation_model: Option<String>,
     allowed_fragment_types: Option<Vec<String>>,
     rt_scale: Option<f32>,
-    unimod_annotation: Option<bool>,
-    max_delta_unimod: Option<f64>,
-    enable_unannotated: Option<bool>,
-    unimod_xml_path: Option<String>,
     fine_tune: Option<bool>,
     train_data_path: Option<String>,
     save_model: Option<bool>,
@@ -91,10 +83,6 @@ fn generate_insilico_library(
         fragmentation_model,
         allowed_fragment_types,
         rt_scale,
-        unimod_annotation,
-        max_delta_unimod,
-        enable_unannotated,
-        unimod_xml_path,
         fine_tune,
         train_data_path,
         save_model,

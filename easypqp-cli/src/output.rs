@@ -3,11 +3,9 @@ use std::io::{Write, BufWriter};
 use std::path::Path;
 
 use easypqp_core::{InsilicoPQPSettings, PeptideProperties};
-use easypqp_core::unimod::{UnimodDb, reannotate_modified_sequence};
 use redeem_properties::utils::peptdeep_utils::remove_mass_shift;
 use sage_core::peptide::Peptide;
 use anyhow::Result;
-
 use csv::ReaderBuilder;
 use std::fs::File;
 use std::io::BufReader;
@@ -20,7 +18,7 @@ use redeem_properties::utils::peptdeep_utils::ion_mobility_to_ccs_bruker;
 use std::sync::Arc;
 
 #[cfg(feature = "parquet")]
-use arrow::array::{ArrayRef, Float64Array, Int32Array, Int64Array, StringArray};
+use arrow::array::{ArrayRef, Float64Array, Int32Array, StringArray};
 #[cfg(feature = "parquet")]
 use arrow::datatypes::{DataType, Field, Schema};
 #[cfg(feature = "parquet")]
@@ -30,26 +28,13 @@ use parquet::arrow::ArrowWriter;
 #[cfg(feature = "parquet")]
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 
-/// Sage annotates N-terminal modifications with a leading dash, e.g.
-/// `[+42.0106]-MAGIR`. After `remove_mass_shift` strips the modification
-/// tag, the naked sequence is left as `-MAGIR`. This helper removes that
-/// leading dash so the PeptideSequence column contains just `MAGIR`.
-fn clean_nterm_dash(seq: &str) -> String {
-    if seq.starts_with('-') {
-        return seq[1..].to_string();
-    }
-    seq.to_string()
-}
 
 pub fn write_assays_to_tsv<P: AsRef<Path>>(
     assays: &[PeptideProperties],
     peptides: &[Peptide],
     path: P,
     insilico_settings: &InsilicoPQPSettings,
-    unimod_db: Option<&UnimodDb>,
-    decoy_tag: &str,
-    peptide_offset: usize,
-) -> Result<()> {
+) -> std::io::Result<()> {
     let path = path.as_ref();
     let write_header = !path.exists() || metadata(path)?.len() == 0;
 
@@ -108,12 +93,8 @@ pub fn write_assays_to_tsv<P: AsRef<Path>>(
     for assay in assays {
         let peptide_idx = assay.peptide_index as usize;
         let decoy = peptides[peptide_idx].decoy;
-        let raw_modified = peptides[peptide_idx].to_string();
-        let modified_peptide = match unimod_db {
-            Some(db) => reannotate_modified_sequence(&raw_modified, db, insilico_settings.enable_unannotated)?,
-            None => raw_modified,
-        };
-        let naked_peptide = clean_nterm_dash(&remove_mass_shift(&peptides[peptide_idx].to_string()));
+        let modified_peptide = peptides[peptide_idx].to_string();
+        let naked_peptide = remove_mass_shift(&modified_peptide);
         let protein = &peptides[peptide_idx].proteins;
 
         // Parse protein entries which may be in the form `db|ACCESSION|GENE_ID` (e.g. sp|P26196|DDX6_HUMAN)
@@ -155,11 +136,6 @@ pub fn write_assays_to_tsv<P: AsRef<Path>>(
 
         let protein_id_field = if protein_accessions.is_empty() {
             "".to_string()
-        } else if decoy && !decoy_tag.is_empty() {
-            protein_accessions.iter()
-                .map(|a| if a.starts_with(decoy_tag) { a.clone() } else { format!("{}{}", decoy_tag, a) })
-                .collect::<Vec<_>>()
-                .join(";")
         } else {
             protein_accessions.join(";")
         };
@@ -169,11 +145,6 @@ pub fn write_assays_to_tsv<P: AsRef<Path>>(
 
         let gene_name_field = if protein_genes.is_empty() {
             "".to_string()
-        } else if decoy && !decoy_tag.is_empty() {
-            protein_genes.iter()
-                .map(|g| if g.starts_with(decoy_tag) { g.clone() } else { format!("{}{}", decoy_tag, g) })
-                .collect::<Vec<_>>()
-                .join(";")
         } else {
             protein_genes.join(";")
         };
@@ -209,13 +180,6 @@ pub fn write_assays_to_tsv<P: AsRef<Path>>(
             let product_charge = assay.product.charge[i];
             let annotation = format!("{}{}^{}", fragment_type, series_number, product_charge);
 
-            // TransitionGroupId encodes both peptide and precursor charge:
-            // each (peptide, charge) pair is a unique precursor / transition group.
-            // peptide_offset ensures globally unique IDs across chunks.
-            let global_peptide_idx = peptide_offset as u64 + assay.peptide_index as u64;
-            let transition_group_id = global_peptide_idx * 10 + assay.precursor.charge as u64;
-            let transition_id = transition_group_id * 1000 + i as u64;
-
             writeln!(
                 writer,
                 "{}\t{:.4}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
@@ -236,8 +200,8 @@ pub fn write_assays_to_tsv<P: AsRef<Path>>(
                 annotation,
                 "", // CollisionEnergy
                 assay.precursor.ion_mobility,
-                transition_group_id,
-                transition_id,
+                assay.peptide_index,
+                assay.peptide_index * 1000 + i as u32,
                 decoy as i8,
                 1, 0, 1,
                 "" // Peptidoforms
@@ -256,14 +220,11 @@ pub struct ParquetChunkWriter {
     writer: ArrowWriter<File>,
     schema: Arc<Schema>,
     next_peptide_offset: usize,
-    unimod_db: Option<UnimodDb>,
-    enable_unannotated: bool,
-    decoy_tag: String,
 }
 
 #[cfg(feature = "parquet")]
 impl ParquetChunkWriter {
-    pub fn try_new<P: AsRef<Path>>(path: P, insilico_settings: &InsilicoPQPSettings, decoy_tag: &str) -> Result<Self> {
+    pub fn try_new<P: AsRef<Path>>(path: P) -> Result<Self> {
         let fields = vec![
             Field::new("PrecursorMz", DataType::Float64, false),
             Field::new("ProductMz", DataType::Float64, false),
@@ -280,8 +241,8 @@ impl ParquetChunkWriter {
             Field::new("FragmentSeriesNumber", DataType::Int32, false),
             Field::new("Annotation", DataType::Utf8, true),
             Field::new("PrecursorIonMobility", DataType::Float64, false),
-            Field::new("TransitionGroupId", DataType::Int64, false),
-            Field::new("TransitionId", DataType::Int64, false),
+            Field::new("TransitionGroupId", DataType::Int32, false),
+            Field::new("TransitionId", DataType::Int32, false),
             Field::new("Decoy", DataType::Int32, false),
             Field::new("DetectingTransition", DataType::Int32, false),
             Field::new("IdentifyingTransition", DataType::Int32, false),
@@ -292,25 +253,7 @@ impl ParquetChunkWriter {
         let file = File::create(path.as_ref())?;
         let writer = ArrowWriter::try_new(file, schema.clone(), None)?;
 
-        let unimod_db = if insilico_settings.unimod_annotation {
-            let db = if let Some(ref xml_path) = insilico_settings.unimod_xml_path {
-                UnimodDb::from_file(xml_path, insilico_settings.max_delta_unimod)?
-            } else {
-                UnimodDb::from_embedded(insilico_settings.max_delta_unimod)?
-            };
-            Some(db)
-        } else {
-            None
-        };
-
-        Ok(Self {
-            writer,
-            schema,
-            next_peptide_offset: 0,
-            unimod_db,
-            enable_unannotated: insilico_settings.enable_unannotated,
-            decoy_tag: decoy_tag.to_string(),
-        })
+        Ok(Self { writer, schema, next_peptide_offset: 0 })
     }
 
     pub fn write_chunk(&mut self, assays: &[PeptideProperties], peptides: &[Peptide], insilico_settings: &InsilicoPQPSettings) -> Result<()> {
@@ -331,8 +274,8 @@ impl ParquetChunkWriter {
         let mut v_fragment_series_number: Vec<i32> = Vec::new();
         let mut v_annotation: Vec<Option<String>> = Vec::new();
         let mut v_precursor_ion_mobility: Vec<f64> = Vec::new();
-        let mut v_transition_group_id: Vec<i64> = Vec::new();
-        let mut v_transition_id: Vec<i64> = Vec::new();
+        let mut v_transition_group_id: Vec<i32> = Vec::new();
+        let mut v_transition_id: Vec<i32> = Vec::new();
         let mut v_decoy: Vec<i32> = Vec::new();
         let mut v_detecting: Vec<i32> = Vec::new();
         let mut v_identifying: Vec<i32> = Vec::new();
@@ -344,12 +287,8 @@ impl ParquetChunkWriter {
             let local_peptide_idx = assay.peptide_index as usize;
             let peptide_global_idx = self.next_peptide_offset + local_peptide_idx;
             let decoy_flag = peptides[local_peptide_idx].decoy as i32;
-            let raw_modified = peptides[local_peptide_idx].to_string();
-            let modified_peptide = match &self.unimod_db {
-                Some(db) => reannotate_modified_sequence(&raw_modified, db, self.enable_unannotated)?,
-                None => raw_modified,
-            };
-            let naked_peptide = clean_nterm_dash(&remove_mass_shift(&peptides[local_peptide_idx].to_string()));
+            let modified_peptide = peptides[local_peptide_idx].to_string();
+            let naked_peptide = remove_mass_shift(&modified_peptide);
             let protein = &peptides[local_peptide_idx].proteins;
 
             let protein_accessions: Vec<String> = protein
@@ -373,29 +312,9 @@ impl ParquetChunkWriter {
                 .filter(|s| !s.is_empty())
                 .collect();
 
-            let is_decoy = decoy_flag != 0;
-
-            let protein_id_field = if protein_accessions.is_empty() {
-                None
-            } else if is_decoy && !self.decoy_tag.is_empty() {
-                Some(protein_accessions.iter()
-                    .map(|a| if a.starts_with(&self.decoy_tag) { a.clone() } else { format!("{}{}", self.decoy_tag, a) })
-                    .collect::<Vec<_>>()
-                    .join(";"))
-            } else {
-                Some(protein_accessions.join(";"))
-            };
+            let protein_id_field = if protein_accessions.is_empty() { None } else { Some(protein_accessions.join(";")) };
             let uniprot_id_field = protein_id_field.clone();
-            let gene_name_field = if protein_genes.is_empty() {
-                None
-            } else if is_decoy && !self.decoy_tag.is_empty() {
-                Some(protein_genes.iter()
-                    .map(|g| if g.starts_with(&self.decoy_tag) { g.clone() } else { format!("{}{}", self.decoy_tag, g) })
-                    .collect::<Vec<_>>()
-                    .join(";"))
-            } else {
-                Some(protein_genes.join(";"))
-            };
+            let gene_name_field = if protein_genes.is_empty() { None } else { Some(protein_genes.join(";")) };
 
             let non_zero_indices: Vec<usize> = assay.product.intensity
                 .iter()
@@ -435,12 +354,8 @@ impl ParquetChunkWriter {
                 v_fragment_series_number.push(series_number);
                 v_annotation.push(Some(annotation));
                 v_precursor_ion_mobility.push(assay.precursor.ion_mobility as f64);
-                // TransitionGroupId encodes both peptide and precursor charge:
-                // each (peptide, charge) pair is a unique precursor / transition group.
-                let transition_group_id = peptide_global_idx as i64 * 10 + assay.precursor.charge as i64;
-                let transition_id = transition_group_id * 1000 + i as i64;
-                v_transition_group_id.push(transition_group_id);
-                v_transition_id.push(transition_id);
+                v_transition_group_id.push(peptide_global_idx as i32);
+                v_transition_id.push((peptide_global_idx as i32) * 1000 + i as i32);
                 v_decoy.push(decoy_flag);
                 v_detecting.push(1);
                 v_identifying.push(0);
@@ -470,8 +385,8 @@ impl ParquetChunkWriter {
         let arr_fragment_series_number: ArrayRef = Arc::new(Int32Array::from(v_fragment_series_number));
         let arr_annotation: ArrayRef = Arc::new(opt_string_array(v_annotation));
         let arr_precursor_ion_mobility: ArrayRef = Arc::new(Float64Array::from(v_precursor_ion_mobility));
-        let arr_transition_group_id: ArrayRef = Arc::new(Int64Array::from(v_transition_group_id));
-        let arr_transition_id: ArrayRef = Arc::new(Int64Array::from(v_transition_id));
+        let arr_transition_group_id: ArrayRef = Arc::new(Int32Array::from(v_transition_group_id));
+        let arr_transition_id: ArrayRef = Arc::new(Int32Array::from(v_transition_id));
         let arr_decoy: ArrayRef = Arc::new(Int32Array::from(v_decoy));
         let arr_detecting: ArrayRef = Arc::new(Int32Array::from(v_detecting));
         let arr_identifying: ArrayRef = Arc::new(Int32Array::from(v_identifying));

@@ -4,7 +4,6 @@ use schemars::JsonSchema;
 
 pub mod property_prediction;
 pub mod tuning_data;
-pub mod unimod;
 pub mod util;
 
 
@@ -39,43 +38,11 @@ pub struct InsilicoPQPSettings {
     #[serde(default = "InsilicoPQPSettings::default_rt_scale")]
     #[schemars(description = "RT output scaling factor (default: 100.0)")]
     pub rt_scale: f32,
-
-    /// Re-annotate mass bracket modifications (e.g. `[+57.0215]`) to UniMod notation
-    /// (e.g. `(UniMod:4)`) in the ModifiedPeptideSequence column.
-    #[serde(default = "InsilicoPQPSettings::default_unimod_annotation")]
-    #[schemars(description = "Convert mass brackets to UniMod notation (default: true)")]
-    pub unimod_annotation: bool,
-
-    /// Maximum delta mass tolerance (Da) when matching modifications to UniMod entries.
-    #[serde(default = "InsilicoPQPSettings::default_max_delta_unimod")]
-    #[schemars(description = "Max delta mass for UniMod matching in Da (default: 0.02)")]
-    pub max_delta_unimod: f64,
-
-    /// Keep mass brackets for modifications that cannot be matched to UniMod.
-    /// If false, an error is raised for unmatched modifications.
-    #[serde(default = "InsilicoPQPSettings::default_enable_unannotated")]
-    #[schemars(description = "Keep unmatched mass brackets instead of erroring (default: true)")]
-    pub enable_unannotated: bool,
-
-    /// Optional path to a custom unimod.xml file. If not set, the embedded
-    /// unimod.xml bundled with the binary is used.
-    #[serde(default)]
-    #[schemars(description = "Path to a custom unimod.xml file (default: use embedded)")]
-    pub unimod_xml_path: Option<String>,
 }
 
 impl InsilicoPQPSettings {
     fn default_rt_scale() -> f32 {
         100.0
-    }
-    fn default_unimod_annotation() -> bool {
-        true
-    }
-    fn default_max_delta_unimod() -> f64 {
-        0.02
-    }
-    fn default_enable_unannotated() -> bool {
-        true
     }
 }
 
@@ -89,10 +56,6 @@ impl Default for InsilicoPQPSettings {
             fragmentation_model: "cid_hcd".to_string(),
             allowed_fragment_types: vec!["b".to_string(), "y".to_string()],
             rt_scale: 100.0_f32,
-            unimod_annotation: true,
-            max_delta_unimod: 0.02,
-            enable_unannotated: true,
-            unimod_xml_path: None,
         }
     }
     

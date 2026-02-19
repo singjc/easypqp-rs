@@ -174,10 +174,6 @@ Common modification masses:
 | `fragmentation_model` | string | `"HCD"` | Fragmentation type: `"HCD"`, `"CID"`, or `"ETD"` |
 | `allowed_fragment_types` | array[string] | `["b", "y"]` | Allowed fragment ion types: `"b"`, `"y"` |
 | `rt_scale` | number | `100.0` | Retention time scaling factor (multiplies predicted RT) |
-| `unimod_annotation` | boolean | `true` | Reannotate mass-bracket modifications to UniMod accessions (e.g., `[+57.0215]` → `(UniMod:4)`) |
-| `max_delta_unimod` | number | `0.02` | Maximum delta mass (Da) tolerance for matching to UniMod entries |
-| `enable_unannotated` | boolean | `true` | Keep original mass bracket when no UniMod match is found; if `false`, an error is raised |
-| `unimod_xml_path` | string | `null` | Path to a custom `unimod.xml` file. If omitted, the embedded UniMod database is used |
 
 > [!NOTE]
 > The current MS2 intensity prediction models only support `"b"` and `"y"` fragment ions. 
@@ -191,18 +187,9 @@ Common modification masses:
   "max_transitions": 12,
   "fragmentation_model": "HCD",
   "allowed_fragment_types": ["b", "y"],
-  "rt_scale": 1.0,
-  "unimod_annotation": true,
-  "max_delta_unimod": 0.02,
-  "enable_unannotated": true
+  "rt_scale": 1.0
 }
 ```
-
-> [!NOTE]
-> **UniMod Reannotation:** By default, mass-bracket modification annotations (e.g., `[+57.0215]`) are
-> converted to UniMod accession notation (e.g., `(UniMod:4)`). This uses an embedded copy of the
-> [UniMod](https://www.unimod.org/) database. To use a custom `unimod.xml`, set `unimod_xml_path`
-> to the file path. To disable reannotation entirely, set `unimod_annotation` to `false`.
 
 </details>
 
@@ -242,9 +229,9 @@ Each model (RT, IM, MS2) requires three files:
 | `fine_tune_config` | object | *see below* | Optional fine-tuning configuration |
 
 **Supported Architectures:**
-- RT: `"rt_cnn_tf"`, `"rt_cnn_lstm"`
-- IM/CCS: `"ccs_cnn_tf"`, `"ccs_cnn_lstm"`  
-- MS2: `"ms2_bert"`
+- RT: `"rt_cnn_tf"`, `"rt_lstm"`, `"rt_transformer"`
+- IM/CCS: `"ccs_cnn_tf"`, `"ccs_lstm"`  
+- MS2: `"ms2_bert"`, `"ms2_transformer"`
 
 </details>
 
@@ -335,24 +322,10 @@ easypqp-insilico config.json \
   --parquet
 ```
 
-You can also run without a JSON config file by providing only `--fasta`:
-
-```bash
-easypqp-insilico --fasta my_proteins.fasta
-```
-
-All other parameters will use sensible defaults.
-
 **Available flags:**
 - `--fasta <PATH>`: Override database FASTA file
 - `--output_file <PATH>`: Override output file path  
 - `--no-write-report`: Disable HTML report generation
 - `--parquet`: Output in Parquet format instead of TSV
-
-### Decoy Handling
-
-When `generate_decoys` is enabled, reversed decoy peptides are generated automatically.
-The `decoy_tag` (default `"DECOY_"`) is prefixed to each `ProteinId`, `UniprotId`, and
-`GeneName` for decoy entries, making them easy to distinguish during downstream analysis.
 
 

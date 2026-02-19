@@ -19,7 +19,6 @@ use easypqp_core::{
 
 use crate::input::InsilicoPQP;
 use crate::output::write_assays_to_tsv;
-use easypqp_core::unimod::UnimodDb;
 
 struct PropertyPredictionScores<'a> {
     parameters: &'a InsilicoPQP,
@@ -452,37 +451,13 @@ impl Runner {
         #[cfg(feature = "parquet")]
         let mut parquet_writer = if let Some(ref p) = parquet_path {
             // instantiate parquet writer
-            Some(crate::output::ParquetChunkWriter::try_new(p, &self.parameters.insilico_settings, &self.parameters.database.decoy_tag)?)
-        } else {
-            None
-        };
-
-        // Build UniMod database once for TSV output reannotation
-        let unimod_db = if self.parameters.insilico_settings.unimod_annotation {
-            let db_result = if let Some(ref xml_path) = self.parameters.insilico_settings.unimod_xml_path {
-                info!("Loading custom UniMod XML from '{}'", xml_path);
-                UnimodDb::from_file(xml_path, self.parameters.insilico_settings.max_delta_unimod)
-            } else {
-                UnimodDb::from_embedded(self.parameters.insilico_settings.max_delta_unimod)
-            };
-            match db_result {
-                Ok(db) => {
-                    info!("Loaded UniMod database for modification reannotation (max_delta={} Da)", self.parameters.insilico_settings.max_delta_unimod);
-                    Some(db)
-                }
-                Err(e) => {
-                    warn!("Failed to load UniMod database, skipping reannotation: {}", e);
-                    None
-                }
-            }
+            Some(crate::output::ParquetChunkWriter::try_new(p)?)
         } else {
             None
         };
 
         // No in-memory report accumulation: when Parquet output + report is requested
         // we'll generate the report directly from the Parquet file after closing the writer.
-
-        let mut tsv_peptide_offset: usize = 0;
 
         for (i, peptide_chunk) in self.peptides.chunks(max_chunk_size).enumerate() {
             if max_chunk_size < self.peptides.len() {
@@ -518,14 +493,8 @@ impl Runner {
                     peptide_chunk, // use the chunk peptides, not full self.peptides
                     output_path.as_ref().unwrap(),
                     &self.parameters.insilico_settings,
-                    unimod_db.as_ref(),
-                    &self.parameters.database.decoy_tag,
-                    tsv_peptide_offset,
                 )?;
             }
-
-            // Advance offset for globally unique IDs across chunks
-            tsv_peptide_offset += peptide_chunk.len();
         }
 
         // Close parquet writer if present

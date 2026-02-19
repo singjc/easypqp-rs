@@ -18,9 +18,9 @@ fn main() -> anyhow::Result<()> {
         .about("EasyPQP - In-silico Peptide query parameter generation")
         .arg(
             Arg::new("parameters")
-                .required(false)
+                .required_unless_present("config-help")
                 .value_parser(clap::builder::NonEmptyStringValueParser::new())
-                .help("Path to configuration parameters (JSON file). If omitted, sensible defaults are used.")
+                .help("Path to configuration parameters (JSON file)")
                 .value_hint(ValueHint::FilePath),
         )
         .arg(
