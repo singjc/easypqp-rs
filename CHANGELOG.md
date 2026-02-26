@@ -11,6 +11,8 @@ All notable changes to this project will be documented in this file.
 ### ⚙️ Miscellaneous Tasks
 
 - Update CHANGELOG.md
+- Bump version to 0.1.7 in Cargo.toml and pyproject.toml files
+- Update CHANGELOG.md
 
 ## [0.1.6] - 2026-02-19
 
