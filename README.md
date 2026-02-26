@@ -26,6 +26,58 @@ easypqp-rs has an optional standalone command-line interface (CLI) binary for ge
 easypqp-insilico ./config.json
 ```
 
+## Enabling CUDA Support
+
+easypqp-rs and its CLI and Python bindings can optionally use CUDA for GPU acceleration if the underlying `redeem-properties` dependency is built with the `cuda` feature. This is controlled via Cargo features and is disabled by default.
+
+To enable CUDA support, build with the `cuda` feature at the top level. This will propagate the feature through all crates:
+
+### Rust CLI
+
+```bash
+cargo build --release --features cuda
+```
+
+### Python (via maturin or pip)
+
+If building the Python package from source, pass the feature to maturin:
+
+```bash
+maturin build --features cuda
+# or for develop mode
+maturin develop --features cuda
+```
+
+If using pip, you can pass features with the `--config-settings` flag:
+
+```bash
+pip install . --config-settings=--features=cuda
+```
+
+This will enable CUDA support in all relevant dependencies, including `redeem-properties`.
+
+### Docker / Running the CUDA-enabled container
+
+If you built the CUDA-enabled Docker image (the repository Dockerfile builds the binary with the `cuda` feature), run it on a host with NVIDIA drivers and the NVIDIA Container Toolkit installed. The container must be started with GPU access (for example using Docker's `--gpus` option).
+
+Example: build the image locally (from repo root):
+
+```bash
+docker build -t easypqp-insilico:cuda -f Dockerfile .
+```
+
+Run the container and give it access to all GPUs (mount your working directory so `easypqp-insilico` can read/write data):
+
+```bash
+docker run --rm --gpus all -v "$(pwd):/data" easypqp-insilico:cuda easypqp-insilico /data/config.json
+```
+
+Notes:
+- The host must have the NVIDIA Container Toolkit (nvidia-docker) configured so the container can access GPUs. On modern Docker releases you can use the builtin `--gpus` flag.
+- You can restrict GPUs with `--gpus 'device=0'` or use environment variables to select devices if your application honors them.
+- If you publish the image to a registry, make sure users know that they need NVIDIA drivers and the runtime configured on their host to use the CUDA-enabled image.
+
+
 ## Configuration Reference
 
 The tool is configured via a JSON file. Below is a comprehensive guide to all available parameters.
