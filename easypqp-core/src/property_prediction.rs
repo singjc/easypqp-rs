@@ -549,7 +549,7 @@ impl<'db, 'params> PropertyPrediction<'db, 'params> {
                                         precursor_mz as f64,
                                     )
                                 })
-                                .unwrap_or(f64::NAN),
+                                .unwrap_or(-1.0),
                         },
                         product,
                     })
