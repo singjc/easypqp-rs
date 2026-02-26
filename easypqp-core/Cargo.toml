@@ -4,6 +4,11 @@ version = "0.1.7"
 edition = "2021"
 
 [dependencies]
+ 
+[features]
+cuda = ["redeem-properties/cuda"]
+default = []
+
 sage-core = { git = "https://github.com/lazear/sage", branch = "master" }
 redeem-properties = { git = "https://github.com/singjc/redeem.git", branch = "develop" }
 rustyms = "0.10.0"

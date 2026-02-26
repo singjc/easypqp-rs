@@ -8,6 +8,10 @@ name = "easypqp-insilico"
 path = "src/main.rs"
 
 [dependencies]
+
+[features]
+cuda = ["easypqp-core/cuda"]
+default = []
 easypqp-core = { path = "../easypqp-core" }
 sage-core = { git = "https://github.com/lazear/sage", branch = "master" }
 redeem-properties = { git = "https://github.com/singjc/redeem.git", branch = "develop" }

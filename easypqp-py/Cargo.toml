@@ -8,6 +8,10 @@ name = "easypqp_rs"
 crate-type = ["cdylib"] 
 
 [dependencies]
+
+[features]
+cuda = ["easypqp-cli/cuda"]
+default = []
 easypqp-cli = { path = "../easypqp-cli" }
 pyo3 = { version = "0.24.2", features = ["extension-module", "anyhow"] }
 serde_json = "1.0"
