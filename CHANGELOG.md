@@ -2,6 +2,30 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.8] - 2026-03-24
+
+### 🚀 Features
+
+- Update Dockerfile for CUDA support and enhance README with CUDA usage instructions
+- Add CUDA feature support to Cargo.toml files in cli, core, and py packages
+
+### 🐛 Bug Fixes
+
+- Update Python publish workflow to include source distribution build and artifact upload
+- Change default value from NaN to -1.0 in property prediction implementation
+- Update model paths in DLModel configurations for consistency
+- Restore CUDA feature support in Cargo.toml for easypqp-cli
+- Reorder features section in Cargo.toml for easypqp-core and easypqp-py
+- Update model loading functions to accept optional path parameters
+- Downgrade version to 0.1.8 in Cargo.toml and pyproject.toml files across cli, core, and py packages
+- Add CUDA compute capability environment variable to Dockerfile
+
+### ⚙️ Miscellaneous Tasks
+
+- Update CHANGELOG.md
+- Bump version to 0.1.8 in Cargo.toml and pyproject.toml files across cli, core, and py packages
+- Bump version to 0.1.9 in Cargo.toml and pyproject.toml files across cli, core, and py packages
+
 ## [0.1.7] - 2026-02-19
 
 ### 🐛 Bug Fixes
