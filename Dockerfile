@@ -25,6 +25,9 @@ ENV PATH="/root/.cargo/bin:${PATH}"
 ENV CUDA_HOME=/usr/local/cuda
 ENV PATH=${CUDA_HOME}/bin:${PATH}
 ENV LD_LIBRARY_PATH=${CUDA_HOME}/lib64:${LD_LIBRARY_PATH}
+# Set compute capability to skip nvidia-smi lookup during build
+# 8.6 supports Ampere (A100, A30, A10, RTX 30-series)
+ENV CUDA_COMPUTE_CAP=86
 
 # Work directory and copy sources
 WORKDIR /build
