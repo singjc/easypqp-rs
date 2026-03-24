@@ -178,7 +178,7 @@ pub struct DLFeatureGenerators {
     pub fine_tune_config: Option<FineTuneSettings>,
     
     /// Instrument type
-    #[schemars(description = "Instrument type: 'QE' or 'timsTOF' (default: 'timsTOF')")]
+    #[schemars(description = "Instrument type (supported: 'QE', 'Lumos', 'timsTOF', 'SciexTOF', 'ThermoTOF'; default: 'timsTOF')")]
     pub instrument: Option<String>,
     
     /// Normalized collision energy
