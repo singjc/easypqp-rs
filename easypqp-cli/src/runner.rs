@@ -211,7 +211,7 @@ impl<'a> PropertyPredictionScores<'a> {
 
         let mut model = load_collision_cross_section_model(
             &model_path,
-            &const_path_str,
+            Some(&const_path_str),
             &self
                 .parameters
                 .dl_feature_generators
@@ -295,7 +295,7 @@ impl<'a> PropertyPredictionScores<'a> {
 
         let mut model = load_ms2_model(
             &model_path,
-            &const_path_str,
+            Some(&const_path_str),
             &self
                 .parameters
                 .dl_feature_generators
