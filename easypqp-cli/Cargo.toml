@@ -8,10 +8,6 @@ name = "easypqp-insilico"
 path = "src/main.rs"
 
 [dependencies]
-
-[features]
-cuda = ["easypqp-core/cuda"]
-default = []
 easypqp-core = { path = "../easypqp-core" }
 sage-core = { git = "https://github.com/lazear/sage", branch = "master" }
 redeem-properties = { git = "https://github.com/singjc/redeem.git", branch = "develop" }
@@ -32,6 +28,7 @@ openssl-sys = { version = "0.9", optional = true, features = ["vendored"] }
 
 [features]
 default = ["parquet"]
+cuda = ["easypqp-core/cuda"]
 parquet = ["arrow", "dep:parquet"]
 vendored-openssl = ["openssl-sys"]
 
