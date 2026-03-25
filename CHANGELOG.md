@@ -19,12 +19,14 @@ All notable changes to this project will be documented in this file.
 - Update model loading functions to accept optional path parameters
 - Downgrade version to 0.1.8 in Cargo.toml and pyproject.toml files across cli, core, and py packages
 - Add CUDA compute capability environment variable to Dockerfile
+- Update artifact path for sdist upload in python-publish.yml
 
 ### ⚙️ Miscellaneous Tasks
 
 - Update CHANGELOG.md
 - Bump version to 0.1.8 in Cargo.toml and pyproject.toml files across cli, core, and py packages
 - Bump version to 0.1.9 in Cargo.toml and pyproject.toml files across cli, core, and py packages
+- Update CHANGELOG.md
 
 ## [0.1.7] - 2026-02-19
 
