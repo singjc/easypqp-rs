@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.9] - 2026-03-25
+
+### 🐛 Bug Fixes
+
+- Update instrument description in DLFeatureGenerators struct
+- Update model paths to use dynamic directory for pretrained models
+- Bump version to 0.1.9 in Cargo.toml and pyproject.toml files
+
+### ⚙️ Miscellaneous Tasks
+
+- Update CHANGELOG.md
+
 ## [0.1.8] - 2026-03-24
 
 ### 🚀 Features
