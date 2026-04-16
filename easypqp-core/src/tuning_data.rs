@@ -55,7 +55,7 @@ pub fn read_peptide_data_from_tsv<P: AsRef<Path>>(
     // Flexible column name matching
     for (idx, col) in header_columns.iter().enumerate() {
         match col.to_lowercase().as_str() {
-            s if s.contains("modifiedpeptide") || s.contains("fullpeptidename") => {
+            s if s.contains("modifiedpeptide") || s.contains("fullpeptidename") || s.contains("sequence") => {
                 column_indices.insert("sequence", idx);
             }
             s if s.contains("precursormz") || s.contains("precursor_mz") => {
