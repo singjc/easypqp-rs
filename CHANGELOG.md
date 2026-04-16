@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.10] - 2026-04-12
+
+### 🚀 Features
+
+- Enhance peptide data parsing with mass shift normalization and flexible column matching
+
+### 🐛 Bug Fixes
+
+- Bump version to 0.1.10 in Cargo.toml and pyproject.toml files
+
+### ⚙️ Miscellaneous Tasks
+
+- Update CHANGELOG.md
+
 ## [0.1.9] - 2026-03-25
 
 ### 🐛 Bug Fixes
