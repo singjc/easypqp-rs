@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.11] - 2026-04-16
+
+### 🚀 Features
+
+- Add flexible column matching for 'sequence' in peptide data parsing
+
+### 🐛 Bug Fixes
+
+- Bump version to 0.1.11 in Cargo.toml and pyproject.toml files
+
+### ⚙️ Miscellaneous Tasks
+
+- Update CHANGELOG.md
+
 ## [0.1.10] - 2026-04-12
 
 ### 🚀 Features
