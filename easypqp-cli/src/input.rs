@@ -2,16 +2,17 @@ use std::{collections::HashMap, path::Path};
 
 use anyhow::{ensure, Context, Result};
 use clap::ArgMatches;
-use serde::{Deserialize, Serialize};
-use schemars::{JsonSchema, schema_for};
-use sage_core::{database::{Builder, EnzymeBuilder, Parameters}, modification::ModificationSpecificity};
 use easypqp_core::{util::auto_chunk_size, InsilicoPQPSettings};
-
+use sage_core::{
+    database::{Builder, EnzymeBuilder, Parameters},
+    modification::ModificationSpecificity,
+};
+use schemars::{schema_for, JsonSchema};
+use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, JsonSchema)]
 #[schemars(description = "Peptide chunking strategy for memory management")]
 pub struct ChunkingStrategy(pub usize);
-
 
 impl Default for ChunkingStrategy {
     fn default() -> Self {
@@ -28,7 +29,6 @@ impl ChunkingStrategy {
         }
     }
 }
-
 
 #[derive(Serialize, Clone)]
 /// Actual insilico parameters - may include overrides or default values not set by user
@@ -48,10 +48,10 @@ pub struct InsilicoPQP {
 pub struct DLModel {
     /// Path to model weights file (.pth or .safetensors)
     pub model_path: String,
-    
+
     /// Path to model constants YAML file
     pub constants_path: String,
-    
+
     /// Path to model architecture Python file
     pub architecture: String,
 }
@@ -71,6 +71,8 @@ pub struct FineTuneOptions {
     pub batch_size: Option<usize>,
     pub epochs: Option<usize>,
     pub learning_rate: Option<f64>,
+    pub validation_split: Option<f32>,
+    pub early_stopping_patience: Option<usize>,
     pub save_model: Option<bool>,
 }
 
@@ -79,24 +81,36 @@ pub struct FineTuneOptions {
 pub struct FineTuneSettings {
     /// Enable fine-tuning
     pub fine_tune: bool,
-    
+
     /// Path to training data TSV file. Required columns: 'sequence' (modified sequence annotated with square bracket mass shift, e.g., MGC[+57.0215]AAR), 'precursor_charge', 'retention_time', 'ion_mobility' (if using timsTOF),
     /// 'fragment_type', 'fragment_series_number', 'product_charge', 'intensity'
-    #[schemars(description = "TSV file with columns: sequence, precursor_charge, retention_time, ion_mobility (if applicable), fragment_type, fragment_series_number, product_charge, intensity")]
+    #[schemars(
+        description = "TSV file with columns: sequence, precursor_charge, retention_time, ion_mobility (if applicable), fragment_type, fragment_series_number, product_charge, intensity"
+    )]
     pub train_data_path: String,
-    
+
     /// Batch size for training
     #[serde(default = "FineTuneSettings::default_batch_size")]
     pub batch_size: usize,
-    
+
     /// Number of training epochs
     #[serde(default = "FineTuneSettings::default_epochs")]
     pub epochs: usize,
-    
+
     /// Learning rate
     #[serde(default = "FineTuneSettings::default_learning_rate")]
     pub learning_rate: f64,
-    
+
+    /// Fraction of fine-tuning peptides to hold out for validation.
+    /// Set to 0.0 to disable validation-based early stopping.
+    #[serde(default = "FineTuneSettings::default_validation_split")]
+    pub validation_split: f32,
+
+    /// Number of epochs without validation loss improvement before stopping.
+    /// Ignored when `validation_split` is 0.0.
+    #[serde(default = "FineTuneSettings::default_early_stopping_patience")]
+    pub early_stopping_patience: usize,
+
     /// Save fine-tuned model to disk
     #[serde(default = "FineTuneSettings::default_save_model")]
     pub save_model: bool,
@@ -112,6 +126,12 @@ impl FineTuneSettings {
     fn default_learning_rate() -> f64 {
         0.001
     }
+    fn default_validation_split() -> f32 {
+        0.1
+    }
+    fn default_early_stopping_patience() -> usize {
+        3
+    }
     fn default_save_model() -> bool {
         false
     }
@@ -123,6 +143,8 @@ impl FineTuneSettings {
             batch_size: Self::default_batch_size(),
             epochs: Self::default_epochs(),
             learning_rate: Self::default_learning_rate(),
+            validation_split: Self::default_validation_split(),
+            early_stopping_patience: Self::default_early_stopping_patience(),
             save_model: Self::default_save_model(),
         }
     }
@@ -136,6 +158,8 @@ impl Default for FineTuneSettings {
             batch_size: 256,
             epochs: 3,
             learning_rate: 0.001,
+            validation_split: 0.1,
+            early_stopping_patience: 3,
             save_model: false,
         }
     }
@@ -149,6 +173,8 @@ impl From<FineTuneOptions> for FineTuneSettings {
             batch_size: value.batch_size.unwrap_or(256),
             epochs: value.epochs.unwrap_or(3),
             learning_rate: value.learning_rate.unwrap_or(0.001),
+            validation_split: value.validation_split.unwrap_or(0.1),
+            early_stopping_patience: value.early_stopping_patience.unwrap_or(3),
             save_model: value.save_model.unwrap_or(false),
         }
     }
@@ -160,31 +186,33 @@ pub struct DLFeatureGenerators {
     /// Retention time prediction model
     #[schemars(description = "Custom RT model (model_path, constants_path, architecture)")]
     pub retention_time: Option<DLModel>,
-    
+
     /// Ion mobility prediction model
     #[schemars(description = "Custom IM/CCS model (model_path, constants_path, architecture)")]
     pub ion_mobility: Option<DLModel>,
-    
+
     /// MS2 intensity prediction model
     #[schemars(description = "Custom MS2 model (model_path, constants_path, architecture)")]
     pub ms2_intensity: Option<DLModel>,
-    
+
     /// Compute device
     #[schemars(description = "Device for inference: 'cpu', 'cuda', or 'mps' (default: 'cpu')")]
     pub device: Option<String>,
-    
+
     /// Fine-tuning configuration
     #[schemars(description = "Optional fine-tuning settings for transfer learning")]
     pub fine_tune_config: Option<FineTuneSettings>,
-    
+
     /// Instrument type
-    #[schemars(description = "Instrument type (supported: 'QE', 'Lumos', 'timsTOF', 'SciexTOF', 'ThermoTOF'; default: 'timsTOF')")]
+    #[schemars(
+        description = "Instrument type (supported: 'QE', 'Lumos', 'timsTOF', 'SciexTOF', 'ThermoTOF'; default: 'timsTOF')"
+    )]
     pub instrument: Option<String>,
-    
+
     /// Normalized collision energy
     #[schemars(description = "NCE value for fragmentation (default: 20.0)")]
     pub nce: Option<f32>,
-    
+
     /// Inference batch size
     #[schemars(description = "Batch size for model inference (default: 64)")]
     pub batch_size: Option<usize>,
@@ -261,20 +289,32 @@ impl From<DLFeatureGenerators> for DLFeatureGeneratorSettings {
             && value.ms2_intensity.clone().is_none()
         {
             log::info!("No model configurations provided. Will attempt to retrieve and use pretrained models.");
-            if let Ok(models_dir) = redeem_properties::utils::peptdeep_utils::download_pretrained_models_exist() {
-                let rt_model_path = models_dir.join("redeem/20251205_100_epochs_min_max_rt_cnn_tf.safetensors");
-                let ccs_model_path = models_dir.join("redeem/20251205_500_epochs_early_stopped_100_min_max_ccs_cnn_tf.safetensors");
-                let rt_constants_path = models_dir.join("alphapeptdeep/generic/rt.pth.model_const.yaml");
-                let ccs_constants_path = models_dir.join("alphapeptdeep/generic/ccs.pth.model_const.yaml");
+            if let Ok(models_dir) =
+                redeem_properties::utils::peptdeep_utils::download_pretrained_models_exist()
+            {
+                let rt_model_path =
+                    models_dir.join("redeem/20251205_100_epochs_min_max_rt_cnn_tf.safetensors");
+                let ccs_model_path = models_dir.join(
+                    "redeem/20251205_500_epochs_early_stopped_100_min_max_ccs_cnn_tf.safetensors",
+                );
+                let rt_constants_path =
+                    models_dir.join("alphapeptdeep/generic/rt.pth.model_const.yaml");
+                let ccs_constants_path =
+                    models_dir.join("alphapeptdeep/generic/ccs.pth.model_const.yaml");
                 let ms2_model_path = models_dir.join("alphapeptdeep/generic/ms2.pth");
-                let ms2_constants_path = models_dir.join("alphapeptdeep/generic/ms2.pth.model_const.yaml");
-                
+                let ms2_constants_path =
+                    models_dir.join("alphapeptdeep/generic/ms2.pth.model_const.yaml");
+
                 retention_time_model_config = DLModel {
                     model_path: rt_model_path.to_string_lossy().to_string(),
                     constants_path: rt_constants_path.to_string_lossy().to_string(),
                     architecture: "rt_cnn_tf".to_string(),
                 };
-                log::info!("Pre-trained retention time model (architecture: {}): {}", retention_time_model_config.architecture,retention_time_model_config.model_path);
+                log::info!(
+                    "Pre-trained retention time model (architecture: {}): {}",
+                    retention_time_model_config.architecture,
+                    retention_time_model_config.model_path
+                );
 
                 // Note: Probably only want to use and set CCS model if instrument is TIMSTOF, if the model config is not explicitly set
                 if value
@@ -289,7 +329,11 @@ impl From<DLFeatureGenerators> for DLFeatureGeneratorSettings {
                         constants_path: ccs_constants_path.to_string_lossy().to_string(),
                         architecture: "ccs_cnn_tf".to_string(),
                     };
-                    log::info!("Pre-trained ion mobility model (architecture: {}): {}", ion_mobility_model_config.architecture,ion_mobility_model_config.model_path);
+                    log::info!(
+                        "Pre-trained ion mobility model (architecture: {}): {}",
+                        ion_mobility_model_config.architecture,
+                        ion_mobility_model_config.model_path
+                    );
                 }
 
                 ms2_intensity_model_config = DLModel {
@@ -297,7 +341,11 @@ impl From<DLFeatureGenerators> for DLFeatureGeneratorSettings {
                     constants_path: ms2_constants_path.to_string_lossy().to_string(),
                     architecture: "ms2_bert".to_string(),
                 };
-                log::info!("Pre-trained PeptDeep MS2 intensity model (architecture: {}): {}", ms2_intensity_model_config.architecture,ms2_intensity_model_config.model_path);
+                log::info!(
+                    "Pre-trained PeptDeep MS2 intensity model (architecture: {}): {}",
+                    ms2_intensity_model_config.architecture,
+                    ms2_intensity_model_config.model_path
+                );
             }
         }
 
@@ -334,35 +382,46 @@ pub struct Input {
 /// Documentation-only struct for generating JSON schema help
 /// This mirrors the Input struct but only includes fields we control
 #[derive(JsonSchema)]
-#[schemars(title = "EasyPQP Configuration", description = "JSON configuration file for in-silico peptide library generation")]
+#[schemars(
+    title = "EasyPQP Configuration",
+    description = "JSON configuration file for in-silico peptide library generation"
+)]
 #[allow(dead_code)]
 struct InputSchema {
     /// Database and digestion parameters (REQUIRED)
-    /// Fields: fasta (required), enzyme, peptide_min_mass, peptide_max_mass, 
+    /// Fields: fasta (required), enzyme, peptide_min_mass, peptide_max_mass,
     /// static_mods, variable_mods, max_variable_mods, generate_decoys, decoy_tag
-    #[schemars(description = "FASTA database path and digestion settings (enzyme, modifications, decoys)")]
+    #[schemars(
+        description = "FASTA database path and digestion settings (enzyme, modifications, decoys)"
+    )]
     database: DatabaseSchema,
-    
+
     /// In-silico library generation settings (REQUIRED)
-    #[schemars(description = "Precursor charges, fragment charges, transition limits, fragmentation model, and RT scaling")]
+    #[schemars(
+        description = "Precursor charges, fragment charges, transition limits, fragmentation model, and RT scaling"
+    )]
     insilico_settings: InsilicoPQPSettings,
-    
+
     /// Deep learning feature prediction models (OPTIONAL)
-    #[schemars(description = "Custom model paths for RT/IM/MS2 prediction. If omitted, pretrained AlphaPeptDeep models will be auto-downloaded")]
+    #[schemars(
+        description = "Custom model paths for RT/IM/MS2 prediction. If omitted, pretrained AlphaPeptDeep models will be auto-downloaded"
+    )]
     dl_feature_generators: Option<DLFeatureGenerators>,
-    
+
     /// Peptide chunking strategy for memory management
-    #[schemars(description = "Number of peptides per chunk (default: 0 = auto-calculate based on available memory)")]
+    #[schemars(
+        description = "Number of peptides per chunk (default: 0 = auto-calculate based on available memory)"
+    )]
     peptide_chunking: ChunkingStrategy,
-    
+
     /// Output file path
     #[schemars(description = "Path for output TSV file (default: 'insilico_library.tsv')")]
     output_file: Option<String>,
-    
+
     /// Generate HTML report
     #[schemars(description = "Whether to generate an HTML quality report (default: true)")]
     write_report: Option<bool>,
-    
+
     /// Output in Parquet format
     #[schemars(description = "Generate output in Parquet format instead of TSV (default: false)")]
     parquet_output: Option<bool>,
@@ -375,21 +434,21 @@ struct InputSchema {
 struct DatabaseSchema {
     /// Path to FASTA protein database file (REQUIRED)
     fasta: String,
-    
+
     /// Generate decoy peptides (default: true)
     #[schemars(description = "Auto-generate decoy sequences")]
     generate_decoys: Option<bool>,
-    
+
     /// Decoy protein tag/prefix (default: "rev_")
     #[schemars(description = "Prefix for decoy protein names")]
     decoy_tag: Option<String>,
-    
+
     /// Minimum peptide mass in Daltons (default: 500.0)
     peptide_min_mass: Option<f32>,
-    
+
     /// Maximum peptide mass in Daltons (default: 5000.0)
     peptide_max_mass: Option<f32>,
-    
+
     /// Maximum number of variable modifications per peptide (default: 2)
     max_variable_mods: Option<usize>,
 }
@@ -399,8 +458,7 @@ impl Input {
     /// If no parameters file is provided, sensible defaults are used.
     pub fn from_arguments(matches: ArgMatches) -> Result<Self> {
         let mut input = if let Some(path) = matches.get_one::<String>("parameters") {
-            Input::load(path)
-                .with_context(|| format!("Failed to read parameters from `{path}`"))?
+            Input::load(path).with_context(|| format!("Failed to read parameters from `{path}`"))?
         } else {
             // No config file provided — use defaults
             Input {
@@ -473,8 +531,7 @@ impl Input {
     ) -> Result<Self> {
         // Check if it's a path to an existing file
         let mut input: Input = if Path::new(path).exists() {
-            Input::load(path)
-                .with_context(|| format!("Failed to read parameters from `{path}`"))?
+            Input::load(path).with_context(|| format!("Failed to read parameters from `{path}`"))?
         } else {
             serde_json::from_str(path)
                 .with_context(|| "Failed to parse JSON configuration from string")?
@@ -528,18 +585,30 @@ impl Input {
         }
 
         // Apply dl_feature_generators overrides, initializing the section if needed
-        if fine_tune.is_some() || train_data_path.is_some() || save_model.is_some()
-            || instrument.is_some() || nce.is_some() || batch_size.is_some()
+        if fine_tune.is_some()
+            || train_data_path.is_some()
+            || save_model.is_some()
+            || instrument.is_some()
+            || nce.is_some()
+            || batch_size.is_some()
         {
-            let dl = input.dl_feature_generators.get_or_insert_with(DLFeatureGenerators::default);
+            let dl = input
+                .dl_feature_generators
+                .get_or_insert_with(DLFeatureGenerators::default);
             if let Some(instrument) = instrument {
                 dl.instrument = Some(instrument);
             }
             if let Some(nce) = nce {
                 dl.nce = Some(nce);
             }
-            if fine_tune.is_some() || train_data_path.is_some() || save_model.is_some() || batch_size.is_some() {
-                let ft = dl.fine_tune_config.get_or_insert_with(FineTuneSettings::default);
+            if fine_tune.is_some()
+                || train_data_path.is_some()
+                || save_model.is_some()
+                || batch_size.is_some()
+            {
+                let ft = dl
+                    .fine_tune_config
+                    .get_or_insert_with(FineTuneSettings::default);
                 if let Some(fine_tune) = fine_tune {
                     ft.fine_tune = fine_tune;
                 }
@@ -577,21 +646,19 @@ impl Input {
 
     pub fn build(self) -> anyhow::Result<InsilicoPQP> {
         let database = self.database.make_parameters();
-        
+
         let parquet_output = self.parquet_output.unwrap_or(false);
         let default_extension = if parquet_output { "parquet" } else { "tsv" };
-        let output_file = self.output_file.clone().unwrap_or_else(|| {
-            format!("insilico_library.{}", default_extension)
-        });
+        let output_file = self
+            .output_file
+            .clone()
+            .unwrap_or_else(|| format!("insilico_library.{}", default_extension));
 
         Ok(InsilicoPQP {
             version: clap::crate_version!().into(),
             database,
             insilico_settings: self.insilico_settings.clone(),
-            dl_feature_generators: self
-                .dl_feature_generators
-                .unwrap_or_default()
-                .into(),
+            dl_feature_generators: self.dl_feature_generators.unwrap_or_default().into(),
             peptide_chunking: self.peptide_chunking.clone(),
             output_file,
             write_report: self.write_report.unwrap_or(true),
@@ -599,7 +666,6 @@ impl Input {
         })
     }
 }
-
 
 /// The below is for data transfer to avoid writing out fields specific for sage
 
@@ -644,7 +710,7 @@ impl InsilicoPQP {
                 max_variable_mods: self.database.max_variable_mods,
                 decoy_tag: &self.database.decoy_tag,
                 generate_decoys: self.database.generate_decoys,
-                fasta: &self.database.fasta
+                fasta: &self.database.fasta,
             },
             insilico_settings: &self.insilico_settings,
             dl_feature_generators: &self.dl_feature_generators,
@@ -658,20 +724,25 @@ impl InsilicoPQP {
 /// This automatically generates help from the struct definitions and doc comments
 pub fn print_config_help() {
     let schema = schema_for!(InputSchema);
-    
+
     println!("═══════════════════════════════════════════════════════════════════════════════");
     println!("                  JSON CONFIGURATION FILE STRUCTURE");
     println!("═══════════════════════════════════════════════════════════════════════════════\n");
-    
-    if let Some(description) = &schema.schema.metadata.as_ref().and_then(|m| m.description.as_ref()) {
+
+    if let Some(description) = &schema
+        .schema
+        .metadata
+        .as_ref()
+        .and_then(|m| m.description.as_ref())
+    {
         println!("{}\n", description);
     }
-    
+
     // Print schema in a readable format
     let json = serde_json::to_string_pretty(&schema).unwrap();
     println!("JSON Schema:");
     println!("{}\n", json);
-    
+
     println!("═══════════════════════════════════════════════════════════════════════════════");
     println!("MINIMAL EXAMPLE:");
     println!("═══════════════════════════════════════════════════════════════════════════════");
@@ -683,7 +754,7 @@ pub fn print_config_help() {
     println!("    \"precursor_charge\": [2, 3]");
     println!("  }}");
     println!("}}\n");
-    
+
     println!("═══════════════════════════════════════════════════════════════════════════════");
     println!("FULL EXAMPLE:");
     println!("═══════════════════════════════════════════════════════════════════════════════");
@@ -704,6 +775,6 @@ pub fn print_config_help() {
     println!("  }},");
     println!("  \"output_file\": \"my_library.tsv\"");
     println!("}}\n");
-    
+
     println!("For more information: https://github.com/singjc/easypqp-rs\n");
 }

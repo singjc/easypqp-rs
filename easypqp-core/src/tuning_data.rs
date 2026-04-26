@@ -55,7 +55,10 @@ pub fn read_peptide_data_from_tsv<P: AsRef<Path>>(
     // Flexible column name matching
     for (idx, col) in header_columns.iter().enumerate() {
         match col.to_lowercase().as_str() {
-            s if s.contains("modifiedpeptide") || s.contains("fullpeptidename") || s.contains("sequence") => {
+            s if s.contains("modifiedpeptide")
+                || s.contains("fullpeptidename")
+                || s.contains("sequence") =>
+            {
                 column_indices.insert("sequence", idx);
             }
             s if s.contains("precursormz") || s.contains("precursor_mz") => {
@@ -79,16 +82,16 @@ pub fn read_peptide_data_from_tsv<P: AsRef<Path>>(
             s if s.contains("libraryintensity") || s.contains("intensity") => {
                 column_indices.insert("intensity", idx);
             }
-            s if s.contains("normalizedretentiontime")
-                || s.contains("rt")
-                || s.contains("retention_time") =>
-            {
+            s if s.contains("normalizedretentiontime") || s.contains("retention_time") => {
                 column_indices.insert("retention_time", idx);
             }
-            s if s.contains("precursorionmobility")
-                || s.contains("im")
-                || s.contains("ion_mobility") =>
-            {
+            s if s.contains("precursorionmobility") || s.contains("ion_mobility") => {
+                column_indices.insert("ion_mobility", idx);
+            }
+            "rt" | "irt" => {
+                column_indices.insert("retention_time", idx);
+            }
+            "im" => {
                 column_indices.insert("ion_mobility", idx);
             }
             // s if s.contains("collisionenergy") || s.contains("nce") => {

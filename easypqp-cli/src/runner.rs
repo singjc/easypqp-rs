@@ -1,7 +1,9 @@
 use anyhow::{Context, Result};
+use easypqp_core::{
+    property_prediction::PropertyPrediction, tuning_data::read_peptide_data_from_tsv,
+    util::write_bytes_to_file, PeptideProperties,
+};
 use log::{info, warn};
-use sage_core::peptide::Peptide;
-use std::{path::Path, time::Instant};
 use redeem_properties::utils::{peptdeep_utils::load_modifications, utils::get_device};
 use redeem_properties::{
     models::{
@@ -12,44 +14,154 @@ use redeem_properties::{
     },
     utils::data_handling::{PeptideData, TargetNormalization},
 };
-use easypqp_core::{
-    property_prediction::PropertyPrediction, tuning_data::read_peptide_data_from_tsv,
-    util::write_bytes_to_file, PeptideProperties,
-};
+use sage_core::peptide::Peptide;
+use std::{path::Path, time::Instant};
 
 use crate::input::InsilicoPQP;
 use crate::output::write_assays_to_tsv;
 use easypqp_core::unimod::UnimodDb;
 
+fn normalize_scalar(value: f32, norm: TargetNormalization) -> f32 {
+    match norm {
+        TargetNormalization::ZScore(mean, std) if std != 0.0 => (value - mean) / std,
+        TargetNormalization::MinMax(min, max) if max != min => (value - min) / (max - min),
+        TargetNormalization::ZScore(_, _) | TargetNormalization::MinMax(_, _) => 0.0,
+        TargetNormalization::None => value,
+    }
+}
+
+fn normalize_ccs_training_data(
+    peptides: &[PeptideData],
+    target_norm: TargetNormalization,
+) -> Vec<PeptideData> {
+    peptides
+        .iter()
+        .cloned()
+        .map(|mut peptide| {
+            if let Some(ccs) = peptide.ccs.as_mut() {
+                *ccs = normalize_scalar(*ccs, target_norm);
+            }
+            peptide
+        })
+        .collect()
+}
+
+fn stable_peptide_hash(peptide: &PeptideData) -> u64 {
+    const FNV_OFFSET_BASIS: u64 = 0xcbf29ce484222325;
+    const FNV_PRIME: u64 = 0x100000001b3;
+
+    let mut hash = FNV_OFFSET_BASIS;
+
+    for &byte in peptide.modified_sequence.iter() {
+        hash ^= byte as u64;
+        hash = hash.wrapping_mul(FNV_PRIME);
+    }
+
+    if let Some(charge) = peptide.charge {
+        for byte in charge.to_le_bytes() {
+            hash ^= byte as u64;
+            hash = hash.wrapping_mul(FNV_PRIME);
+        }
+    }
+
+    hash
+}
+
+fn split_training_and_validation_data(
+    peptides: Vec<PeptideData>,
+    validation_split: f32,
+) -> (Vec<PeptideData>, Option<Vec<PeptideData>>) {
+    let split = validation_split.clamp(0.0, 0.95);
+
+    if split <= 0.0 || peptides.len() < 2 {
+        return (peptides, None);
+    }
+
+    let mut ranked_indices: Vec<(u64, usize)> = peptides
+        .iter()
+        .enumerate()
+        .map(|(idx, peptide)| (stable_peptide_hash(peptide), idx))
+        .collect();
+    ranked_indices.sort_unstable();
+
+    let desired_val_count = ((peptides.len() as f32) * split).round() as usize;
+    let val_count = desired_val_count.clamp(1, peptides.len() - 1);
+    let mut is_validation = vec![false; peptides.len()];
+
+    for &(_, idx) in ranked_indices.iter().take(val_count) {
+        is_validation[idx] = true;
+    }
+
+    let mut training_data = Vec::with_capacity(peptides.len() - val_count);
+    let mut validation_data = Vec::with_capacity(val_count);
+
+    for (idx, peptide) in peptides.into_iter().enumerate() {
+        if is_validation[idx] {
+            validation_data.push(peptide);
+        } else {
+            training_data.push(peptide);
+        }
+    }
+
+    (training_data, Some(validation_data))
+}
+
 struct PropertyPredictionScores<'a> {
     parameters: &'a InsilicoPQP,
     peptides: &'a [Peptide],
     fine_tune_data: Option<Vec<PeptideData>>,
+    fine_tune_validation_data: Option<Vec<PeptideData>>,
 }
 
 impl<'a> PropertyPredictionScores<'a> {
     pub fn new(parameters: &'a InsilicoPQP, peptides: &'a [Peptide]) -> Self {
-        let fine_tune_data = if parameters.dl_feature_generators.fine_tune_config.fine_tune {
-            Some(
-                read_peptide_data_from_tsv(
-                    parameters
-                        .dl_feature_generators
-                        .fine_tune_config
-                        .train_data_path
-                        .clone(),
-                    parameters.dl_feature_generators.nce as i32,
-                    &parameters.dl_feature_generators.instrument,
-                )
-                .unwrap(),
+        let (fine_tune_data, fine_tune_validation_data) = if parameters
+            .dl_feature_generators
+            .fine_tune_config
+            .fine_tune
+        {
+            let all_fine_tune_data = read_peptide_data_from_tsv(
+                parameters
+                    .dl_feature_generators
+                    .fine_tune_config
+                    .train_data_path
+                    .clone(),
+                parameters.dl_feature_generators.nce as i32,
+                &parameters.dl_feature_generators.instrument,
             )
+            .unwrap();
+
+            let validation_split = parameters
+                .dl_feature_generators
+                .fine_tune_config
+                .validation_split;
+            let (training_data, validation_data) =
+                split_training_and_validation_data(all_fine_tune_data, validation_split);
+
+            if let Some(val_data) = validation_data.as_ref() {
+                info!(
+                        "Using {} fine-tuning peptides for training and {} for validation (validation_split={:.2})",
+                        training_data.len(),
+                        val_data.len(),
+                        validation_split
+                    );
+            } else if validation_split > 0.0 {
+                warn!(
+                        "Validation split requested ({:.2}) but insufficient fine-tuning data was available; continuing without validation-based early stopping.",
+                        validation_split
+                    );
+            }
+
+            (Some(training_data), validation_data)
         } else {
-            None
+            (None, None)
         };
 
         Self {
             parameters,
             peptides,
             fine_tune_data,
+            fine_tune_validation_data,
         }
     }
 
@@ -105,6 +217,19 @@ impl<'a> PropertyPredictionScores<'a> {
         }
     }
 
+    fn fine_tune_patience(&self) -> usize {
+        let patience = self
+            .parameters
+            .dl_feature_generators
+            .fine_tune_config
+            .early_stopping_patience;
+        if patience == 0 {
+            usize::MAX
+        } else {
+            patience
+        }
+    }
+
     fn load_rt_model(&self) -> Result<RTModelWrapper> {
         let model_path = self
             .parameters
@@ -152,9 +277,11 @@ impl<'a> PropertyPredictionScores<'a> {
                 // Load modifications map
                 let modifications = load_modifications()?;
 
-                // Fine-tune the model
+                let validation_data = self.fine_tune_validation_data.as_ref();
+                let early_stopping_patience = validation_data.map(|_| self.fine_tune_patience());
                 model.fine_tune(
                     &self.fine_tune_data.as_ref().unwrap(),
+                    validation_data,
                     modifications,
                     self.parameters
                         .dl_feature_generators
@@ -168,7 +295,9 @@ impl<'a> PropertyPredictionScores<'a> {
                         .dl_feature_generators
                         .fine_tune_config
                         .epochs,
+                    early_stopping_patience,
                     TargetNormalization::None,
+                    None,
                 )?;
 
                 if self
@@ -234,12 +363,24 @@ impl<'a> PropertyPredictionScores<'a> {
                     n_fine_tune_data
                 );
             } else {
+                let target_norm = model
+                    .output_normalization()
+                    .unwrap_or(TargetNormalization::None);
+                let training_data =
+                    normalize_ccs_training_data(self.fine_tune_data.as_ref().unwrap(), target_norm);
+                let validation_data = self
+                    .fine_tune_validation_data
+                    .as_ref()
+                    .map(|data| normalize_ccs_training_data(data, target_norm));
+
                 // Load modifications map
                 let modifications = load_modifications()?;
 
-                // Fine-tune the model
+                let validation_data = validation_data.as_ref();
+                let early_stopping_patience = validation_data.map(|_| self.fine_tune_patience());
                 model.fine_tune(
-                    &self.fine_tune_data.as_ref().unwrap(),
+                    &training_data,
+                    validation_data,
                     modifications,
                     self.parameters
                         .dl_feature_generators
@@ -253,7 +394,9 @@ impl<'a> PropertyPredictionScores<'a> {
                         .dl_feature_generators
                         .fine_tune_config
                         .epochs,
-                    TargetNormalization::None,
+                    early_stopping_patience,
+                    target_norm,
+                    None,
                 )?;
 
                 if self
@@ -276,6 +419,7 @@ impl<'a> PropertyPredictionScores<'a> {
             }
         }
 
+        model.set_evaluation_mode();
         Ok(model)
     }
 
@@ -321,9 +465,11 @@ impl<'a> PropertyPredictionScores<'a> {
                 // Load modifications map
                 let modifications = load_modifications()?;
 
-                // Fine-tune the model
+                let validation_data = self.fine_tune_validation_data.as_ref();
+                let early_stopping_patience = validation_data.map(|_| self.fine_tune_patience());
                 model.fine_tune(
                     &self.fine_tune_data.as_ref().unwrap(),
+                    validation_data,
                     modifications,
                     self.parameters
                         .dl_feature_generators
@@ -337,7 +483,9 @@ impl<'a> PropertyPredictionScores<'a> {
                         .dl_feature_generators
                         .fine_tune_config
                         .epochs,
+                    early_stopping_patience,
                     TargetNormalization::None,
+                    None,
                 )?;
 
                 if self
@@ -360,6 +508,7 @@ impl<'a> PropertyPredictionScores<'a> {
             }
         }
 
+        model.set_evaluation_mode();
         Ok(model)
     }
 
@@ -420,8 +569,11 @@ impl Runner {
     }
 
     pub fn run(self) -> anyhow::Result<()> {
-        let max_chunk_size = self.parameters.peptide_chunking.resolve(self.parameters.dl_feature_generators.batch_size);
-    
+        let max_chunk_size = self
+            .parameters
+            .peptide_chunking
+            .resolve(self.parameters.dl_feature_generators.batch_size);
+
         // Only write log if max_chunk_size is less than the number of peptides
         if max_chunk_size < self.peptides.len() {
             log::info!("Processing max {} peptides per chunk", max_chunk_size);
@@ -434,9 +586,9 @@ impl Runner {
             );
             std::fs::remove_file(&self.parameters.output_file)?;
         }
-    
+
         let start_time = Instant::now();
-        
+
         // Determine output paths based on parquet flag
         let (output_path, parquet_path) = if self.parameters.parquet_output {
             // When parquet is enabled, derive .parquet filename from output_file
@@ -447,19 +599,25 @@ impl Runner {
             // TSV output
             (Some(self.parameters.output_file.clone()), None)
         };
-        
+
         // Prepare optional streaming parquet writer (created only when feature enabled).
         #[cfg(feature = "parquet")]
         let mut parquet_writer = if let Some(ref p) = parquet_path {
             // instantiate parquet writer
-            Some(crate::output::ParquetChunkWriter::try_new(p, &self.parameters.insilico_settings, &self.parameters.database.decoy_tag)?)
+            Some(crate::output::ParquetChunkWriter::try_new(
+                p,
+                &self.parameters.insilico_settings,
+                &self.parameters.database.decoy_tag,
+            )?)
         } else {
             None
         };
 
         // Build UniMod database once for TSV output reannotation
         let unimod_db = if self.parameters.insilico_settings.unimod_annotation {
-            let db_result = if let Some(ref xml_path) = self.parameters.insilico_settings.unimod_xml_path {
+            let db_result = if let Some(ref xml_path) =
+                self.parameters.insilico_settings.unimod_xml_path
+            {
                 info!("Loading custom UniMod XML from '{}'", xml_path);
                 UnimodDb::from_file(xml_path, self.parameters.insilico_settings.max_delta_unimod)
             } else {
@@ -467,11 +625,17 @@ impl Runner {
             };
             match db_result {
                 Ok(db) => {
-                    info!("Loaded UniMod database for modification reannotation (max_delta={} Da)", self.parameters.insilico_settings.max_delta_unimod);
+                    info!(
+                        "Loaded UniMod database for modification reannotation (max_delta={} Da)",
+                        self.parameters.insilico_settings.max_delta_unimod
+                    );
                     Some(db)
                 }
                 Err(e) => {
-                    warn!("Failed to load UniMod database, skipping reannotation: {}", e);
+                    warn!(
+                        "Failed to load UniMod database, skipping reannotation: {}",
+                        e
+                    );
                     None
                 }
             }
@@ -544,27 +708,32 @@ impl Runner {
                     Err(e) => warn!("Failed to generate HTML report from Parquet: {}", e),
                 }
             } else {
-                let report_path = format!("{}.html", self.parameters.output_file.trim_end_matches(".tsv"));
-                match crate::output::generate_html_report(&self.parameters.output_file, &report_path) {
+                let report_path = format!(
+                    "{}.html",
+                    self.parameters.output_file.trim_end_matches(".tsv")
+                );
+                match crate::output::generate_html_report(
+                    &self.parameters.output_file,
+                    &report_path,
+                ) {
                     Ok(_) => info!("Generated HTML report: {}", report_path),
                     Err(e) => warn!("Failed to generate HTML report: {}", e),
                 }
             }
         }
-    
+
         let execution_time = Instant::now() - start_time;
         log::info!(
             "Insilico library generation: {:8} min",
             execution_time.as_secs() / 60
         );
-    
+
         let path = "easypqp_insilico.json";
         let json = serde_json::to_string_pretty(&self.parameters.as_serializable())?;
         println!("{}", json);
         let bytes = serde_json::to_vec_pretty(&self.parameters.as_serializable())?;
         write_bytes_to_file(path, &bytes)?;
-    
+
         Ok(())
     }
-    
 }

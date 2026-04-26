@@ -315,6 +315,8 @@ Fine-tune pretrained models on your own experimental data for improved accuracy.
 | `batch_size` | integer | `256` | Training batch size |
 | `epochs` | integer | `3` | Number of training epochs |
 | `learning_rate` | number | `0.001` | Learning rate for optimizer |
+| `validation_split` | number | `0.1` | Fraction of fine-tuning peptides held out for validation; set to `0.0` to disable validation-based early stopping |
+| `early_stopping_patience` | integer | `3` | Stop after this many epochs without validation loss improvement; ignored when `validation_split` is `0.0` |
 | `save_model` | boolean | `false` | Save fine-tuned model weights to disk |
 
 **Training Data Format (TSV):**
@@ -323,7 +325,7 @@ Required columns:
 - `sequence`: Modified sequence with square bracket notation (e.g., `MGC[+57.0215]AAR`)
 - `precursor_charge`: Precursor charge state
 - `retention_time`: Experimental retention time
-- `ion_mobility`: CCS value (only if using timsTOF)
+- `ion_mobility`: Experimental ion mobility / `1/K0` value (only if using timsTOF; converted to CCS internally for model training)
 - `fragment_type`: Fragment ion type (`b`, `y`, etc.)
 - `fragment_series_number`: Fragment position
 - `product_charge`: Fragment charge
@@ -337,6 +339,8 @@ Required columns:
   "batch_size": 256,
   "epochs": 5,
   "learning_rate": 0.0001,
+  "validation_split": 0.1,
+  "early_stopping_patience": 3,
   "save_model": true
 }
 ```
@@ -407,5 +411,3 @@ All other parameters will use sensible defaults.
 When `generate_decoys` is enabled, reversed decoy peptides are generated automatically.
 The `decoy_tag` (default `"DECOY_"`) is prefixed to each `ProteinId`, `UniprotId`, and
 `GeneName` for decoy entries, making them easy to distinguish during downstream analysis.
-
-
