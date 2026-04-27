@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.13] - 2026-04-27
+
+### 🚀 Features
+
+- Add utility functions for path handling and ensure parent directory exists
+
+### 🐛 Bug Fixes
+
+- Bump version to 0.1.13 in Cargo.toml and pyproject.toml files
+
+### ⚙️ Miscellaneous Tasks
+
+- Update CHANGELOG.md
+
 ## [0.1.12] - 2026-04-26
 
 ### 🚀 Features
