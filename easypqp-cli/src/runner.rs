@@ -15,7 +15,10 @@ use redeem_properties::{
     utils::data_handling::{PeptideData, TargetNormalization},
 };
 use sage_core::peptide::Peptide;
-use std::{path::Path, time::Instant};
+use std::{
+    path::{Path, PathBuf},
+    time::Instant,
+};
 
 use crate::input::InsilicoPQP;
 use crate::output::write_assays_to_tsv;
@@ -104,6 +107,41 @@ fn split_training_and_validation_data(
     }
 
     (training_data, Some(validation_data))
+}
+
+fn path_with_suffixed_filename(path: &Path, suffix: &str) -> PathBuf {
+    let stem = path
+        .file_stem()
+        .or_else(|| path.file_name())
+        .map(|value| value.to_string_lossy().into_owned())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "output".to_string());
+    let file_name = format!("{stem}{suffix}");
+
+    match path.parent() {
+        Some(parent) if !parent.as_os_str().is_empty() => parent.join(file_name),
+        _ => PathBuf::from(file_name),
+    }
+}
+
+fn fine_tuned_model_output_path(model_path: &str) -> PathBuf {
+    path_with_suffixed_filename(Path::new(model_path), "_fine_tuned.safetensors")
+}
+
+fn config_snapshot_output_path(output_file: &str) -> PathBuf {
+    path_with_suffixed_filename(Path::new(output_file), ".config.json")
+}
+
+fn ensure_parent_dir_exists(path: &Path) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        if !parent.as_os_str().is_empty() {
+            std::fs::create_dir_all(parent).with_context(|| {
+                format!("Failed to create output directory {}", parent.display())
+            })?;
+        }
+    }
+
+    Ok(())
 }
 
 struct PropertyPredictionScores<'a> {
@@ -209,14 +247,6 @@ impl<'a> PropertyPredictionScores<'a> {
         )
     }
 
-    fn remove_extension(&self, model_path: &str) -> String {
-        let path = Path::new(model_path);
-        match path.file_stem() {
-            Some(stem) => stem.to_string_lossy().to_string(),
-            None => model_path.to_string(),
-        }
-    }
-
     fn fine_tune_patience(&self) -> usize {
         let patience = self
             .parameters
@@ -312,10 +342,15 @@ impl<'a> PropertyPredictionScores<'a> {
                         .retention_time
                         .model_path
                         .clone();
-                    let model_path = self.remove_extension(&model_path);
-                    let model_path = format!("{}_fine_tuned.safetensors", model_path);
-                    info!("Saving fine-tuned RT model to {}", model_path);
-                    model.save(&model_path)?;
+                    let model_path = fine_tuned_model_output_path(&model_path);
+                    let model_path_str = model_path.to_string_lossy().into_owned();
+                    info!("Saving fine-tuned RT model to {}", model_path.display());
+                    model.save(&model_path_str).with_context(|| {
+                        format!(
+                            "Failed to save fine-tuned RT model to {}",
+                            model_path.display()
+                        )
+                    })?;
                 }
             }
         }
@@ -411,10 +446,15 @@ impl<'a> PropertyPredictionScores<'a> {
                         .ion_mobility
                         .model_path
                         .clone();
-                    let model_path = self.remove_extension(&model_path);
-                    let model_path = format!("{}_fine_tuned.safetensors", model_path);
-                    info!("Saving fine-tuned CCS model to {}", model_path);
-                    model.save(&model_path)?;
+                    let model_path = fine_tuned_model_output_path(&model_path);
+                    let model_path_str = model_path.to_string_lossy().into_owned();
+                    info!("Saving fine-tuned CCS model to {}", model_path.display());
+                    model.save(&model_path_str).with_context(|| {
+                        format!(
+                            "Failed to save fine-tuned CCS model to {}",
+                            model_path.display()
+                        )
+                    })?;
                 }
             }
         }
@@ -500,10 +540,18 @@ impl<'a> PropertyPredictionScores<'a> {
                         .ms2_intensity
                         .model_path
                         .clone();
-                    let model_path = self.remove_extension(&model_path);
-                    let model_path = format!("{}_fine_tuned.safetensors", model_path);
-                    info!("Saving fine-tuned MS2 Intensity model to {}", model_path);
-                    model.save(&model_path)?;
+                    let model_path = fine_tuned_model_output_path(&model_path);
+                    let model_path_str = model_path.to_string_lossy().into_owned();
+                    info!(
+                        "Saving fine-tuned MS2 Intensity model to {}",
+                        model_path.display()
+                    );
+                    model.save(&model_path_str).with_context(|| {
+                        format!(
+                            "Failed to save fine-tuned MS2 intensity model to {}",
+                            model_path.display()
+                        )
+                    })?;
                 }
             }
         }
@@ -569,6 +617,8 @@ impl Runner {
     }
 
     pub fn run(self) -> anyhow::Result<()> {
+        ensure_parent_dir_exists(Path::new(&self.parameters.output_file))?;
+
         let max_chunk_size = self
             .parameters
             .peptide_chunking
@@ -728,12 +778,44 @@ impl Runner {
             execution_time.as_secs() / 60
         );
 
-        let path = "easypqp_insilico.json";
+        let path = config_snapshot_output_path(&self.parameters.output_file);
         let json = serde_json::to_string_pretty(&self.parameters.as_serializable())?;
         println!("{}", json);
         let bytes = serde_json::to_vec_pretty(&self.parameters.as_serializable())?;
-        write_bytes_to_file(path, &bytes)?;
+        let path_str = path.to_string_lossy().into_owned();
+        write_bytes_to_file(&path_str, &bytes)
+            .with_context(|| format!("Failed to write run configuration to {}", path.display()))?;
+        info!("Saved run configuration to {}", path.display());
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{config_snapshot_output_path, fine_tuned_model_output_path};
+    use std::path::PathBuf;
+
+    #[test]
+    fn config_snapshot_path_uses_output_directory() {
+        let path =
+            config_snapshot_output_path("/tmp/results/insilico/easypqp_insilico_library.tsv");
+        assert_eq!(
+            path,
+            PathBuf::from("/tmp/results/insilico/easypqp_insilico_library.config.json")
+        );
+    }
+
+    #[test]
+    fn fine_tuned_model_path_preserves_parent_directory() {
+        let path = fine_tuned_model_output_path(
+            "/models/custom/20251205_100_epochs_min_max_rt_cnn_tf.safetensors",
+        );
+        assert_eq!(
+            path,
+            PathBuf::from(
+                "/models/custom/20251205_100_epochs_min_max_rt_cnn_tf_fine_tuned.safetensors"
+            )
+        );
     }
 }

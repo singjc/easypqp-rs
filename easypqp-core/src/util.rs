@@ -1,7 +1,7 @@
-use std::fs::File;
+use anyhow::Error;
+use std::fs::{create_dir_all, File};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
-use anyhow::Error;
 use sysinfo::System;
 
 /// Reads a FASTA file and returns a Fasta object.
@@ -18,14 +18,13 @@ where
     let mut file = File::open(path)?;
     let mut contents = String::new();
     file.read_to_string(&mut contents)?;
-    
+
     Ok(sage_core::fasta::Fasta::parse(
         contents,
         decoy_tag.as_ref(),
         generate_decoys,
     ))
 }
-
 
 pub fn read_json<S, T>(path: S) -> Result<T, Error>
 where
@@ -39,33 +38,34 @@ where
     Ok(serde_json::from_str(&contents)?)
 }
 
-
-
 pub fn write_bytes_to_file(path: &str, bytes: &[u8]) -> std::io::Result<()> {
     let path = Path::new(path);
+    if let Some(parent) = path.parent() {
+        if !parent.as_os_str().is_empty() {
+            create_dir_all(parent)?;
+        }
+    }
     let mut file = File::create(path)?;
     file.write_all(bytes)?;
     Ok(())
 }
 
-
 pub fn auto_chunk_size(peptide_bytes_estimate: usize, safety_ratio: f64) -> usize {
     let mut sys = System::new_all();
     sys.refresh_memory();
 
-    let available_bytes = sys.free_memory() * 1024; 
+    let available_bytes = sys.free_memory() * 1024;
     let safe_bytes = (available_bytes as f64 * safety_ratio) as usize;
 
     let chunk = safe_bytes / peptide_bytes_estimate;
     chunk.clamp(1000, 10_000_000) // minimum of 1000 peptides per chunk
 }
 
-
 pub fn get_test_file(name: &str) -> PathBuf {
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
 
     // Walk up to workspace root
-    let workspace_root = manifest_dir.ancestors().nth(1).unwrap(); 
+    let workspace_root = manifest_dir.ancestors().nth(1).unwrap();
 
     workspace_root.join("test-data").join(name)
 }
